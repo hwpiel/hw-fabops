@@ -12,6 +12,10 @@ import re
 from pathlib import Path
 
 import json
+import sqlite3
+import time
+import uuid
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -19,8 +23,9 @@ from pydantic import BaseModel
 
 from src import scenario
 from src.graph import build_graph
+from src.llm import CHAT_MODEL
 from src.nodes.action_planner import PARAM_LIMITS, _managed_params
-from src.tools import run_sql
+from src.tools import DB_PATH, run_sql
 
 ROOT = Path(__file__).resolve().parent
 
@@ -40,6 +45,17 @@ def _bootstrap():
             runpy.run_path(str(ROOT / "data" / "build_index.py"), run_name="__main__")
         except Exception as e:
             print(f"[bootstrap] RAG 인덱스 구축 실패(키 미설정?): {e} — 목데이터 모드로 서빙")
+
+    # 감사 이력 — 모든 분석 실행을 서버에 남긴다 (조회는 Raw 데이터 브라우저에서)
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS audit_runs (
+            run_id TEXT, ts TEXT, query TEXT, affected_equip TEXT,
+            loss_krw INTEGER, validation TEXT, revisions INTEGER,
+            duration_s REAL, model TEXT)"""
+    )
+    con.commit()
+    con.close()
 
 
 _bootstrap()
@@ -108,11 +124,38 @@ def _evidence(state: dict) -> dict:
 
 @app.post("/api/analyze")
 def analyze(body: AnalyzeIn):
+    t0 = time.time()
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
     state = GRAPH.invoke(
         {"query": body.query, "revision_count": 0}, {"recursion_limit": 40}
     )
+    duration = round(time.time() - t0, 1)
+
+    c = state.get("cost_impact") or {}
+    v = state.get("validation") or {}
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT INTO audit_runs VALUES (?,?,?,?,?,?,?,?,?)",
+        (
+            run_id,
+            datetime.now().isoformat(timespec="seconds"),
+            body.query,
+            c.get("affected_equip"),
+            c.get("loss_krw"),
+            f"{sum(1 for x in v.values() if x)}/{len(v)}" if v else "n/a",
+            state.get("revision_count", 0),
+            duration,
+            CHAT_MODEL,
+        ),
+    )
+    con.commit()
+    con.close()
+
     return {
         "query": body.query,
+        "run_id": run_id,
+        "model": CHAT_MODEL,
+        "duration_s": duration,
         "plan": state.get("plan", []),
         "root_cause": state.get("root_cause", ""),
         "confidence": _confidence(state.get("root_cause", "")),
@@ -134,6 +177,7 @@ _TABLES = {  # 화이트리스트: 테이블명 → 정렬 컬럼(최근 우선)
     "equipment_log": "ts",
     "metrology": None,
     "cost_master": None,
+    "audit_runs": "ts",
 }
 
 _SOURCES = [

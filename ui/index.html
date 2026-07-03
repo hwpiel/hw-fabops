@@ -344,6 +344,7 @@ const USE_API = location.protocol.startsWith("http") && !new URLSearchParams(loc
 
 const MOCK = {
   query:"M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘",
+  run_id:"20260703-demo", model:"gemini-2.5-flash", duration_s:148.1,
   confidence:"높음",
   root_cause:"RTP-01의 peak_temp가 목표 1050℃ 대비 약 12℃ 상승하며 도펀트 과확산이 발생, sheet resistance가 스펙 상한(215Ω)을 이탈해 수율이 하락한 것으로 판단됩니다. FDC 로그의 승온 트렌드와 과거 동형 이슈(2025-Q3)가 일치하며, 대조 설비 RTP-02는 정상 범위입니다. 파이로미터 드리프트가 유력 원인입니다.",
   kg_paths:[
@@ -355,7 +356,10 @@ const MOCK = {
     affected_equip:"RTP-01", contrast_equip:"RTP-02", yield_loss_pp:5.92,
     recent_wafers:200, lost_wafers:12, loss_krw:31200000, monthly_projection_krw:117000000,
     anomaly_from:"2026-06-24",
+    significance:{baseline_sigma_pp:0.229, sigma_multiple:25.8, significant:true,
+      rule:"수율 하락폭이 기준기간 표준편차(σ)의 3배 이상일 때 이상 판정 (SPC 3σ 준용)"},
     formula:[
+      "이상 판정: 하락 5.92%p = 기준기간 σ(0.229%p)의 25.8배 ≥ 3σ → 통계적으로 유의",
       "손실 웨이퍼 12장 = 최근 투입 200장 × 수율하락 5.92%p",
       "손실액 31,200,000원 = 12장 × 스크랩원가 2,600,000원/장",
       "월 환산 117,000,000원 = 31,200,000원 ÷ 최근 8일 × 30일"],
@@ -505,7 +509,7 @@ function renderResult(d){
   drawKpis(c);
 
   $("t-report").innerHTML=`<div class="meta-row"><span class="a">경영 보고서 · rev ${d.revision||1}</span>
-    <span class="b">report_writer 생성 · 검증 ${Object.values(d.validation||{}).filter(Boolean).length}/3 통과</span></div>
+    <span class="b">검증 ${Object.values(d.validation||{}).filter(Boolean).length}/3 통과${d.model?` · ${d.model}`:""}${d.run_id?` · run ${d.run_id}`:""}${d.duration_s?` · ${d.duration_s}s`:""}</span></div>
     <div class="doc">${md(d.report||"")}</div>`;
 
   $("t-evidence").innerHTML = evidenceTab(d);
@@ -814,7 +818,8 @@ function renderDataView(){
           <option value="lot_yield">lot_yield — MES 로트 수율</option>
           <option value="equipment_log">equipment_log — FDC 센서</option>
           <option value="metrology">metrology — 계측</option>
-          <option value="cost_master">cost_master — 원가 기준정보</option></select></div>
+          <option value="cost_master">cost_master — 원가 기준정보</option>
+          <option value="audit_runs">audit_runs — 분석 실행 이력 (감사)</option></select></div>
         <div class="f-field"><label>행 수</label><select id="tblLim" style="width:90px" onchange="loadTable()"><option>20</option><option selected>50</option><option>100</option></select></div>
         <button class="btn-pri" style="height:38px" onclick="loadTable()">조회</button>
         <span id="tblCnt" style="font-family:var(--mono);font-size:11px;color:var(--t4);align-self:center"></span></div>

@@ -26,12 +26,19 @@ class TestCostModel(unittest.TestCase):
     def test_assumptions_documented(self):
         self.assertGreaterEqual(len(self.r["assumptions"]), 3)
 
+    def test_statistical_significance_gate(self):
+        sig = self.r["significance"]
+        self.assertTrue(sig["significant"])
+        self.assertGreaterEqual(sig["sigma_multiple"], 3.0)
+        self.assertGreater(sig["baseline_sigma_pp"], 0)
+        self.assertEqual(len(self.r["formula"]), 4)  # 유의성 판정이 산식 1행으로 노출
+
     def test_evidence_series_included(self):
         self.assertEqual(self.r["contrast_equip"], "RTP-02")
         self.assertIn("RTP-01", self.r["daily_yield"])
         self.assertIn("RTP-02", self.r["daily_yield"])
         self.assertGreaterEqual(len(self.r["daily_yield"]["RTP-01"]), 10)
-        self.assertEqual(len(self.r["formula"]), 3)
+        self.assertEqual(len(self.r["formula"]), 4)
 
 
 if __name__ == "__main__":

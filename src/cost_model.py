@@ -7,7 +7,7 @@ Python 으로 손실액을 계산하고, LLM(neural 해석부)은 이 숫자를 
 """
 from __future__ import annotations
 
-from statistics import mean
+from statistics import mean, pstdev
 
 from .tools import run_sql
 
@@ -62,6 +62,18 @@ def compute_loss() -> dict:
     n_recent_days = len([d for d in dates if d >= mid])
     monthly_projection = int(scrap_loss / max(n_recent_days, 1) * 30)
 
+    # 통계적 유의성 게이트 (SPC 3σ 준용) — 평균 차이가 기준기간 정상 변동(σ) 대비
+    # 3배를 넘을 때만 '이상'으로 판정한다. 오탐(정상 변동을 이상으로 오인)은
+    # 불필요한 PM·라인 정지로 이어지므로, 판정 근거를 수치로 남긴다.
+    base_sigma = round(pstdev(worst["base"]), 3) if len(worst["base"]) > 1 else 0.0
+    sigma_multiple = round(worst["delta_pp"] / base_sigma, 1) if base_sigma > 0 else None
+    significance = {
+        "baseline_sigma_pp": base_sigma,
+        "sigma_multiple": sigma_multiple,
+        "significant": bool(sigma_multiple is not None and sigma_multiple >= 3.0),
+        "rule": "수율 하락폭이 기준기간 표준편차(σ)의 3배 이상일 때 이상 판정 (SPC 3σ 준용)",
+    }
+
     # 근거 데이터: 대조 설비(동일 공정, 변동 최소) + 일별 수율 시계열 — 화면의 트렌드 차트가 소비
     contrast_id = None
     for eid, e in by_equip.items():
@@ -78,11 +90,18 @@ def compute_loss() -> dict:
         for eid, dd in daily.items()
     }
 
+    sig_line = (
+        f"이상 판정: 하락 {worst['delta_pp']}%p = 기준기간 σ({base_sigma}%p)의 {sigma_multiple}배 ≥ 3σ → 통계적으로 유의"
+        if significance["significant"]
+        else f"이상 판정 보류: 하락 {worst['delta_pp']}%p = 기준기간 σ({base_sigma}%p)의 {sigma_multiple}배 < 3σ — 정상 변동 범위 가능"
+    )
     return {
         "contrast_equip": contrast_id,
         "daily_yield": daily_yield,
         "anomaly_from": mid,
+        "significance": significance,
         "formula": [
+            sig_line,
             f"손실 웨이퍼 {lost_wafers}장 = 최근 투입 {worst['recent_wafers']}장 × 수율하락 {worst['delta_pp']}%p",
             f"손실액 {scrap_loss:,}원 = {lost_wafers}장 × 스크랩원가 {int(cost['scrap_cost']):,}원/장",
             f"월 환산 {monthly_projection:,}원 = {scrap_loss:,}원 ÷ 최근 {n_recent_days}일 × 30일",
