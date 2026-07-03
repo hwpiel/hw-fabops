@@ -22,6 +22,26 @@ from src.tools import run_sql
 
 ROOT = Path(__file__).resolve().parent
 
+
+def _bootstrap():
+    """클라우드 배포 대응 — 부팅 시 데이터가 없으면 스스로 만든다.
+
+    fab.sqlite 없음 → 시드 생성. chroma_db 없음 → RAG 인덱스 구축(키 필요,
+    실패해도 서버는 뜬다 — UI 가 목데이터로 폴백하므로 화면 데모는 유지된다).
+    """
+    import runpy
+
+    if not (ROOT / "data" / "fab.sqlite").exists():
+        runpy.run_path(str(ROOT / "data" / "seed_db.py"), run_name="__main__")
+    if not (ROOT / "data" / "chroma_db").exists():
+        try:
+            runpy.run_path(str(ROOT / "data" / "build_index.py"), run_name="__main__")
+        except Exception as e:
+            print(f"[bootstrap] RAG 인덱스 구축 실패(키 미설정?): {e} — 목데이터 모드로 서빙")
+
+
+_bootstrap()
+
 app = FastAPI(title="hw-fabops API")
 GRAPH = build_graph()
 
