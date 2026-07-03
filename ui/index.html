@@ -675,6 +675,82 @@ try{ if(localStorage.getItem("snav-min")==="1") $("snav").classList.add("min"); 
 
 async function apiGet(p){ const r=await fetch(p); if(!r.ok) throw new Error(r.status); return r.json(); }
 
+/* 포스 다이렉티드 그래프 — 외부 라이브러리 없는 경량 물리엔진 (n<100 전제) */
+function forceGraph(canvas, nodes, links, colorOf){
+  const dpr = window.devicePixelRatio||1;
+  const cw = Math.max(canvas.clientWidth, canvas.parentElement.clientWidth - 44, 760);
+  const chh = canvas.clientHeight || 400;
+  const W = canvas.width = cw*dpr, H = canvas.height = chh*dpr;
+  const ctx = canvas.getContext("2d");
+  nodes.forEach((n,i)=>{ const a=i/nodes.length*6.2832;
+    n.x=W/2+Math.cos(a)*W/4; n.y=H/2+Math.sin(a)*H/4; n.vx=0; n.vy=0; });
+  const idx = Object.fromEntries(nodes.map((n,i)=>[n.id,i]));
+  const L = links.map(l=>[idx[l[0]],idx[l[1]]]).filter(l=>l[0]!==undefined&&l[1]!==undefined);
+  let hover=-1, drag=-1, running=true;
+  const nbr = nodes.map(()=>new Set());
+  L.forEach(([a,b])=>{nbr[a].add(b); nbr[b].add(a);});
+
+  function step(){
+    for(let i=0;i<nodes.length;i++) for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i], b=nodes[j];
+      let dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy+1, d=Math.sqrt(d2);
+      const f=2200*dpr*dpr/d2;
+      a.vx+=dx/d*f; a.vy+=dy/d*f; b.vx-=dx/d*f; b.vy-=dy/d*f;
+    }
+    for(const [i,j] of L){
+      const a=nodes[i], b=nodes[j];
+      let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)+1;
+      const f=(d-95*dpr)*0.015;
+      a.vx+=dx/d*f; a.vy+=dy/d*f; b.vx-=dx/d*f; b.vy-=dy/d*f;
+    }
+    for(const n of nodes){
+      n.vx+=(W/2-n.x)*0.002; n.vy+=(H/2-n.y)*0.002;
+      n.vx*=0.82; n.vy*=0.82;
+      if(nodes.indexOf(n)!==drag){ n.x+=n.vx; n.y+=n.vy; }
+      n.x=Math.max(14*dpr,Math.min(W-14*dpr,n.x)); n.y=Math.max(14*dpr,Math.min(H-14*dpr,n.y));
+    }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(const [i,j] of L){
+      const on = hover>=0 && (i===hover||j===hover);
+      ctx.strokeStyle = on? "rgba(140,180,255,.85)" : "rgba(105,140,220,.22)";
+      ctx.lineWidth = (on?1.4:0.8)*dpr;
+      ctx.beginPath(); ctx.moveTo(nodes[i].x,nodes[i].y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.stroke();
+    }
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i], c=colorOf(n), dim = hover>=0 && i!==hover && !nbr[hover].has(i);
+      ctx.shadowColor=c; ctx.shadowBlur=(i===hover?18:9)*dpr;
+      ctx.fillStyle = dim? "rgba(150,160,180,.35)" : c;
+      ctx.beginPath(); ctx.arc(n.x,n.y,(i===hover?6.5:4.5)*dpr,0,6.2832); ctx.fill();
+      ctx.shadowBlur=0;
+      if(i===hover || !dim){
+        ctx.fillStyle = i===hover? "#FFFFFF" : "rgba(210,220,240,.78)";
+        ctx.font=`${(i===hover?11.5:9.5)*dpr}px "Pretendard Variable",sans-serif`;
+        ctx.textAlign="center"; ctx.fillText(n.label, n.x, n.y-9*dpr);
+      }
+    }
+  }
+  for(let k=0;k<240;k++) step();   /* 초기 배치를 동기 계산 — rAF 정지 환경에서도 즉시 렌더 */
+  draw();
+  (function loop(){ if(!canvas.isConnected){running=false;return;} step(); draw(); if(running) requestAnimationFrame(loop); })();
+
+  const pos=e=>{ const r=canvas.getBoundingClientRect();
+    return [(e.clientX-r.left)*canvas.width/r.width,(e.clientY-r.top)*canvas.height/r.height]; };
+  const pick=(x,y)=>{ let bi=-1,bd=18*dpr;
+    nodes.forEach((n,i)=>{const d=Math.hypot(n.x-x,n.y-y); if(d<bd){bd=d;bi=i;}}); return bi; };
+  canvas.addEventListener("mousemove",e=>{ const [x,y]=pos(e);
+    if(drag>=0){ nodes[drag].x=x; nodes[drag].y=y; nodes[drag].vx=0; nodes[drag].vy=0; }
+    else hover=pick(x,y); canvas.style.cursor = (hover>=0||drag>=0)?"grab":"default"; });
+  canvas.addEventListener("mousedown",e=>{ const [x,y]=pos(e); drag=pick(x,y); });
+  window.addEventListener("mouseup",()=>{ drag=-1; });
+  canvas.addEventListener("mouseleave",()=>{ hover=-1; });
+}
+
+const KG_TYPE_COLOR={process_step:"#8B7CF6",equipment:"#4C8DFF",parameter:"#F2A93B",
+  mechanism:"#F26D6D",metric:"#35C4A0",kpi:"#35C4A0",cost_event:"#EE7FB0",
+  cost_account:"#EE7FB0",maintenance:"#9AA5B1"};
+
 /* 지식 맵 정의서 — 온톨로지를 기준정보 문서로 조회 */
 async function renderOntologyView(){
   const el=$("vb-ontology");
@@ -684,6 +760,9 @@ async function renderOntologyView(){
   const ents=Object.entries(onto.entities||{}), rels=onto.relations||[];
   const types={}; ents.forEach(([id,m])=>{(types[m.type]=types[m.type]||[]).push([id,m])});
   const typeLabel={process_step:"공정단계",equipment:"설비",parameter:"관리 파라미터",mechanism:"불량 메커니즘",metric:"계측 항목",kpi:"KPI",cost_event:"원가 이벤트",cost_account:"원가 계정",maintenance:"보전 항목"};
+  const typeColorLegend = Object.keys(types).map(t=>
+    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t3);margin-right:14px">
+     <span style="width:9px;height:9px;border-radius:50%;background:${KG_TYPE_COLOR[t]||"#9AA5B1"}"></span>${({process_step:"공정단계",equipment:"설비",parameter:"파라미터",mechanism:"메커니즘",metric:"계측",kpi:"KPI",cost_event:"원가 이벤트",cost_account:"원가 계정",maintenance:"보전"})[t]||t}</span>`).join("");
   el.innerHTML=`
     <div class="vcard"><div class="t">개요</div>
       <div class="d">분석 엔진의 하이브리드 검색(벡터+그래프)에서 인과 경로 탐색의 기준이 되는 도메인 지식 맵입니다.
@@ -692,6 +771,10 @@ async function renderOntologyView(){
         <div class="stat"><div class="l">엔티티</div><div class="v">${ents.length}</div></div>
         <div class="stat"><div class="l">관계</div><div class="v">${rels.length}</div></div>
         <div class="stat"><div class="l">엔티티 유형</div><div class="v">${Object.keys(types).length}</div></div></div></div>
+    <div class="vcard"><div class="t">그래프 뷰</div>
+      <div class="d">지식 맵 전체의 연결 구조입니다. 노드에 마우스를 올리면 직접 연결된 인과만 하이라이트되고, 드래그로 배치를 바꿀 수 있습니다.</div>
+      <canvas id="kgCanvas" style="width:100%;height:400px;background:radial-gradient(ellipse at 50% 40%, #1B2436, #10151F);border-radius:10px;display:block"></canvas>
+      <div style="margin-top:10px">${typeColorLegend}</div></div>
     <div class="vcard"><div class="t">대표 인과 경로</div><div class="d">엔티티를 관계로 연결하면 이슈의 전파 경로가 됩니다. 분석 시 질의와 관련된 경로를 자동 추출합니다.</div>
       ${MOCK.kg_paths.slice(0,2).map(p=>`<div class="kgp">${kgChips(p)}</div>`).join("")}</div>
     <div class="vcard"><div class="t">엔티티 정의</div>
@@ -700,6 +783,10 @@ async function renderOntologyView(){
     <div class="vcard"><div class="t">관계 정의</div>
       <table class="data"><tr><th>주어</th><th>관계</th><th>목적어</th></tr>
       ${rels.map(r=>`<tr><td>${r[0]}</td><td style="color:var(--pri-d)">${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</table></div>`;
+
+  const gNodes = ents.map(([id,m])=>({id, label:m.label||id, type:m.type}));
+  const gLinks = rels.map(r=>[r[0], r[2]]);
+  forceGraph($("kgCanvas"), gNodes, gLinks, n=>KG_TYPE_COLOR[n.type]||"#9AA5B1");
 }
 
 /* 프로세스 정의서 — 실행 흐름도 + 노드/상태/라우팅/예외 명세 */
