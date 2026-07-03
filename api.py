@@ -11,7 +11,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from fastapi import FastAPI
+import json
+
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -125,10 +127,58 @@ def analyze(body: AnalyzeIn):
     }
 
 
+# ── 메타 조회 (ERP형 콘솔의 정의서·데이터 브라우저·연계 현황용, 전부 읽기전용) ──
+
+_TABLES = {  # 화이트리스트: 테이블명 → 정렬 컬럼(최근 우선)
+    "lot_yield": "date",
+    "equipment_log": "ts",
+    "metrology": None,
+    "cost_master": None,
+}
+
+_SOURCES = [
+    ("MES 로트 이력", "lot_yield", "date", "제조실행(MES)"),
+    ("FDC 설비 센서", "equipment_log", "ts", "설비 센서(FDC)"),
+    ("계측 데이터", "metrology", None, "계측(YMS)"),
+    ("원가 기준정보", "cost_master", None, "원가(SAP CO)"),
+]
+
+
+@app.get("/api/meta/status")
+def meta_status():
+    out = []
+    for name, tbl, tscol, kind in _SOURCES:
+        n = run_sql(f"SELECT COUNT(*) AS n FROM {tbl}")[0]["n"]
+        last = run_sql(f"SELECT MAX({tscol}) AS m FROM {tbl}")[0]["m"] if tscol else None
+        out.append({"name": name, "table": tbl, "kind": kind, "rows": n, "last": last, "mode": "simulation"})
+    return out
+
+
+@app.get("/api/meta/table/{name}")
+def meta_table(name: str, limit: int = 50):
+    if name not in _TABLES:
+        raise HTTPException(404, "unknown table")
+    limit = max(1, min(int(limit), 200))
+    order = _TABLES[name]
+    rows = run_sql(
+        f"SELECT * FROM {name}" + (f" ORDER BY {order} DESC" if order else "") + f" LIMIT {limit}"
+    )
+    total = run_sql(f"SELECT COUNT(*) AS n FROM {name}")[0]["n"]
+    return {"table": name, "rows": rows, "total": total}
+
+
+@app.get("/api/meta/ontology")
+def meta_ontology():
+    return json.loads((ROOT / "data" / "ontology.json").read_text(encoding="utf-8"))
+
+
 @app.post("/api/scenario")
 def scenario_inject(body: ScenarioIn):
     """Fab Data Gateway — 데모 중 새 이상 시나리오를 실시간 주입."""
-    return scenario.inject(body.equip_id, body.yield_drop_pp, body.days)
+    try:
+        return scenario.inject(body.equip_id, body.yield_drop_pp, body.days)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/scenario/reset")
