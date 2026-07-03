@@ -68,6 +68,18 @@ python -m src.graph "M15 RTP 설비 최근 2주 수율 하락 원인과 재무 �
 uvicorn api:app --port 8796 # 콘솔 UI + API (http://localhost:8796, ?mock 로 목데이터 모드)
 ```
 
+시나리오 주입 (Fab Data Gateway) — 데모 중 새 이상 상황을 실시간으로 만들 수 있다:
+
+```bash
+curl -X POST localhost:8796/api/scenario \
+  -H "Content-Type: application/json" \
+  -d '{"equip_id":"IMP-02","yield_drop_pp":8.0,"days":6}'   # 이온주입 설비에 이상 주입
+curl -X POST localhost:8796/api/scenario/reset               # 기준 데이터 복원
+```
+
+주입 후 콘솔에서 "IMP-02 수율 이슈 분석해줘"를 실행하면 분석기가 새 시나리오를
+스스로 찾아낸다 — 답을 미리 심어둔 데모가 아니라는 것을 이 게이트웨이로 증명한다.
+
 ## 기술 스택
 
 Python · LangGraph(StateGraph, conditional edge, cycle, InMemorySaver) · LangChain ·
