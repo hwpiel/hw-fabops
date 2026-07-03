@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HW FabOps — 제조 이슈 분석</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F4F6; --card:#FFFFFF;
+  --t1:#191F28; --t2:#333D4B; --t3:#6B7684; --t4:#8B95A1; --t5:#A9B2BC; --t6:#C4CBD3;
+  --bd:#E5E8EB; --bd2:#F2F4F6; --bd-in:#D8DEE5;
+  --pri:#3182F6; --pri-d:#1B64DA; --pri-bg:#E8F1FE;
+  --ok:#12B76A; --ok-bg:#F0FAF4; --ok-bd:#D6EFE1;
+  --warn:#B54708; --warn2:#F79009; --warn-bg:#FFF6E8;
+  --bad:#D92D20; --bad-bg:#FDEBEA; --bad-bd:#F7CBC7;
+  --sans:'Pretendard Variable',Pretendard,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--sans);color:var(--t1);background:var(--bg);font-size:13px;line-height:1.6;
+  display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+
+/* shell bar */
+.shell{height:48px;background:var(--card);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 20px;gap:12px;flex:none}
+.shell .logo{width:26px;height:26px;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:14px;font-weight:800}
+.shell .wm{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.shell .sep{width:1px;height:18px;background:var(--bd)}
+.shell .sub{font-size:12px;color:var(--t4)}
+.shell .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.chip-status{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ok);background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:6px;padding:3px 10px}
+.chip-status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.sess{font-family:var(--mono);font-size:11px;color:var(--t5)}
+
+/* object header + filter bar */
+.objhead{background:var(--card);border-bottom:1px solid var(--bd);padding:12px 24px 16px;flex:none}
+.crumb{font-size:12px;color:var(--t4)}
+.crumb b{color:var(--t2);font-weight:600}
+.crumb i{font-style:normal;color:var(--t6);margin:0 6px}
+.title-row{display:flex;align-items:center;gap:10px;margin:6px 0 12px}
+.title-row h1{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.tag{font-size:11.5px;font-weight:700;color:var(--pri-d);background:var(--pri-bg);border-radius:6px;padding:3px 9px}
+.btn-out{margin-left:auto;height:34px;padding:0 14px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--t2);background:var(--card);border:1px solid var(--bd-in);border-radius:8px;cursor:pointer}
+.btn-out:hover{background:var(--bd2)}
+.filters{display:flex;gap:10px;align-items:flex-end}
+.f-field{display:flex;flex-direction:column;gap:4px}
+.f-field label{font-size:11.5px;font-weight:600;color:var(--t3)}
+.f-field input,.f-field select{height:38px;border:1px solid var(--bd-in);border-radius:8px;padding:0 12px;font-family:var(--sans);font-size:13px;color:var(--t1);background:var(--card);outline:none}
+.f-field input:focus{border-color:var(--pri);box-shadow:0 0 0 3px rgba(49,130,246,.12)}
+.f-q{flex:1;min-width:320px}
+.btn-pri{height:38px;padding:0 22px;background:var(--pri);color:#fff;border:0;border-radius:8px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer}
+.btn-pri:hover{background:var(--pri-d)}
+.btn-pri:disabled{background:var(--t5);cursor:wait}
+
+/* main grid */
+.main{flex:1;display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px 24px;min-height:0}
+
+/* left: pipeline + log */
+.pane{background:var(--card);border:1px solid var(--bd);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.pane-h{display:flex;align-items:center;padding:12px 16px 8px}
+.pane-h .t{font-size:14px;font-weight:700}
+.pane-h .m{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--t5)}
+.nodes{padding:2px 10px 8px}
+.node-row{display:flex;align-items:center;gap:9px;padding:4.5px 6px;border-radius:6px}
+.node-row .st-dot{width:7px;height:7px;border-radius:50%;background:var(--t6);flex:none}
+.node-row.run .st-dot{background:var(--warn2);animation:blink .9s infinite}
+.node-row.done .st-dot{background:var(--ok)}
+@keyframes blink{50%{opacity:.25}}
+.node-row .nm{font-family:var(--mono);font-size:11.5px;color:var(--t2)}
+.node-row .st{margin-left:auto;font-size:10.5px;font-weight:600;color:var(--t5)}
+.node-row.run .st{color:var(--warn)}
+.node-row.done .st{color:var(--ok)}
+.log-h{display:flex;align-items:center;padding:10px 16px 6px;border-top:1px solid var(--bd2)}
+.log-h .t{font-size:12px;font-weight:700;color:var(--t3)}
+.log-h .m{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--t5)}
+.logbox{flex:1;margin:0 12px 12px;background:#F9FAFB;border:1px solid var(--bd2);border-radius:8px;overflow-y:auto;padding:8px 10px;font-family:var(--mono);font-size:10.5px;line-height:1.75;min-height:80px}
+.lg{display:flex;gap:7px;white-space:nowrap}
+.lg .ts{color:var(--t5)}
+.lg .nd{color:var(--pri);font-weight:500}
+.lg .ms{color:var(--t2);white-space:normal}
+.lg.warn .nd{color:var(--warn2)}.lg.warn .ms{color:var(--warn)}
+.lg.ok .ms{color:var(--ok);font-weight:600}
+
+/* right column */
+.rcol{display:flex;flex-direction:column;gap:16px;min-height:0}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;flex:none}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 18px}
+.kpi .l{font-size:12px;font-weight:600;color:var(--t4)}
+.kpi .v{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.kpi .v.loss{color:var(--bad)}
+.kpi .v.dim{color:var(--t5)}
+.kpi .s{font-size:11.5px;color:var(--t5);margin-top:2px}
+
+.work{flex:1;background:var(--card);border:1px solid var(--bd);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.tabs{display:flex;padding:0 12px;border-bottom:1px solid var(--bd);flex:none}
+.tab{padding:11px 14px;font-size:13px;font-weight:700;color:var(--t4);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--t1);border-color:var(--pri)}
+.tabc{flex:1;overflow-y:auto;padding:18px 24px;display:none}
+.tabc.on{display:block}
+.placeholder{color:var(--t4);font-size:13px;padding:30px 0;text-align:center}
+
+/* report */
+.meta-row{display:flex;align-items:baseline;margin-bottom:4px}
+.meta-row .a{font-size:12px;font-weight:700;color:var(--t3)}
+.meta-row .b{margin-left:auto;font-size:11px;color:var(--t5)}
+.doc h2{font-size:15px;font-weight:800;margin:22px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--bd2)}
+.doc p{font-size:13.5px;color:var(--t2);margin:7px 0;max-width:820px}
+.doc table{border-collapse:collapse;margin:10px 0;font-size:13px}
+.doc th{background:#F9FAFB;font-weight:700;padding:7px 14px;border:1px solid var(--bd2);text-align:left;font-size:12px}
+.doc td{padding:7px 14px;border:1px solid var(--bd2);color:var(--t2)}
+.doc td:nth-child(2){font-variant-numeric:tabular-nums}
+.doc ol,.doc ul{margin:7px 0 7px 20px;font-size:13.5px;color:var(--t2)}
+.doc li{margin:3px 0}
+
+/* evidence tab */
+.ev-sec{margin-bottom:26px}
+.ev-sec>.t{font-size:13px;font-weight:700;margin-bottom:4px}
+.ev-sec>.d{font-size:11.5px;color:var(--t4);margin-bottom:12px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-card{border:1px solid var(--bd2);border-radius:8px;background:#FCFDFD;padding:12px 14px}
+.chart-card .ct{font-size:12px;font-weight:700;color:var(--t2)}
+.chart-card .cl{display:flex;gap:14px;margin:4px 0 6px;font-size:11px;color:var(--t3)}
+.cl i{font-style:normal;display:inline-flex;align-items:center;gap:5px}
+.cl i::before{content:"";width:14px;height:2.5px;border-radius:2px;background:var(--c)}
+.formula{display:flex;flex-direction:column;gap:8px}
+.f-step{display:flex;align-items:center;gap:10px;background:#F9FAFB;border:1px solid var(--bd2);border-radius:8px;padding:9px 14px}
+.f-step .no{font-family:var(--mono);font-size:10px;color:var(--t5);flex:none;width:14px}
+.f-step .fx{font-family:var(--mono);font-size:12px;color:var(--t2)}
+.sqlq{border:1px solid var(--bd2);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.sqlq summary{cursor:pointer;padding:9px 14px;font-family:var(--mono);font-size:11.5px;color:var(--pri-d);background:#F9FAFB;list-style:none;display:flex;gap:8px;align-items:center}
+.sqlq summary::before{content:"▸";color:var(--t5);font-size:10px}
+.sqlq[open] summary::before{content:"▾"}
+.sqlq summary .cnt{margin-left:auto;color:var(--t5);font-size:10.5px}
+.sqlq .grid{padding:10px 14px;overflow-x:auto}
+table.data{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.data th{background:#F9FAFB;font-size:11px;font-weight:700;color:var(--t3);padding:5px 12px;border:1px solid var(--bd2);text-align:left}
+table.data td{padding:4.5px 12px;border:1px solid var(--bd2);color:var(--t2);font-family:var(--mono);font-size:11.5px}
+.docrow{display:flex;align-items:center;gap:12px;border:1px solid var(--bd2);border-radius:8px;padding:10px 14px;margin-bottom:8px}
+.docrow .fn{font-family:var(--mono);font-size:11.5px;color:var(--pri-d);flex:none}
+.docrow .dt{font-size:10.5px;font-weight:700;color:var(--t3);background:var(--bd2);border-radius:5px;padding:2px 8px;flex:none}
+.docrow .ex{font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.docrow .sc{margin-left:auto;flex:none;display:flex;align-items:center;gap:7px}
+.docrow .bar{width:70px;height:5px;border-radius:3px;background:var(--bd2);overflow:hidden}
+.docrow .bar i{display:block;height:100%;background:var(--pri)}
+.docrow .sv{font-family:var(--mono);font-size:10.5px;color:var(--t4)}
+
+/* cause tab */
+.cause-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cause-h .t{font-size:13px;font-weight:700}
+.badge{font-size:11.5px;font-weight:700;border-radius:6px;padding:3px 10px;border:1px solid}
+.bg-hi{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-bd)}
+.bg-md{color:var(--warn);background:var(--warn-bg);border-color:#F5E1BE}
+.bg-lo{color:var(--bad);background:var(--bad-bg);border-color:var(--bad-bd)}
+.cause-p{font-size:13.5px;line-height:1.8;color:var(--t2);max-width:760px;margin-bottom:22px}
+.kgp{background:#F9FAFB;border:1px solid var(--bd2);border-radius:8px;padding:11px 14px;margin-bottom:10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 4px}
+.kgn{font-size:11.5px;font-weight:600;border-radius:6px;padding:3px 10px;background:var(--bd2);color:var(--t2)}
+.kgn.id{font-family:var(--mono);background:var(--pri-bg);color:var(--pri-d)}
+.kgn.loss{background:var(--bad-bg);color:var(--bad)}
+.kgar{display:inline-flex;flex-direction:column;align-items:center;margin:0 2px;line-height:1}
+.kgar .rl{font-size:10px;color:var(--t4);margin-bottom:1px}
+.kgar svg{display:block}
+
+/* roi tab */
+table.roi{border-collapse:collapse;font-size:13px;width:100%;max-width:860px}
+table.roi th{background:#F9FAFB;font-size:12px;font-weight:700;color:var(--t3);padding:8px 14px;border:1px solid var(--bd2);text-align:left}
+table.roi td{padding:9px 14px;border:1px solid var(--bd2);color:var(--t2);vertical-align:top}
+table.roi td.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.roi td.gain{color:var(--ok);font-weight:700}
+.assume{margin-top:16px}
+.assume .t{font-size:12.5px;font-weight:700;color:var(--t3);margin-bottom:6px}
+.assume li{font-size:12.5px;color:var(--t3);margin:3px 0 3px 16px;list-style:none;position:relative}
+.assume li::before{content:"";position:absolute;left:-14px;top:8px;width:4px;height:4px;border-radius:50%;background:var(--t5)}
+
+/* validation tab */
+.lens{display:flex;align-items:center;gap:12px;border:1px solid var(--bd2);border-radius:8px;padding:11px 16px;margin-bottom:8px;max-width:720px}
+.lens .n{font-size:13px;font-weight:600}
+.lens .d{font-size:11.5px;color:var(--t4)}
+.lens .badge{margin-left:auto}
+.crit-ok{max-width:720px;margin-top:14px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:8px;padding:11px 16px;font-size:12.5px;color:var(--ok);font-weight:600}
+.crit-bad{max-width:720px;margin-top:14px;font-size:12.5px;color:var(--bad)}
+
+/* status bar */
+.status{height:30px;background:var(--card);border-top:1px solid var(--bd);display:flex;align-items:center;gap:18px;padding:0 24px;font-size:11.5px;color:var(--t4);flex:none}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:5px}
+.status .warn{margin-left:auto;color:var(--warn2);font-weight:700}
+@media print{.shell,.objhead .filters,.main>.pane,.status,.tabs{display:none}.main{display:block;padding:0}.tabc{display:block!important;overflow:visible}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="logo">F</div><div class="wm">HW FabOps</div>
+  <div class="sep"></div><div class="sub">제조 이슈 분석</div>
+  <div class="right">
+    <div class="chip-status"><span class="dot"></span>READY</div>
+    <span class="sess" id="sess">ses-a3f82c</span>
+  </div>
+</div>
+
+<div class="objhead">
+  <div class="crumb">품질 관리 <i>›</i> 수율 분석 <i>›</i> <b>AI 이슈 분석</b></div>
+  <div class="title-row">
+    <h1>AI 이슈 분석</h1><span class="tag">M15 FAB</span>
+    <button class="btn-out" onclick="window.print()">보고서 인쇄</button>
+  </div>
+  <div class="filters">
+    <div class="f-field f-q"><label>분석 질의</label>
+      <input id="q" value="M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘" spellcheck="false"></div>
+    <div class="f-field"><label>기간</label><select style="width:120px"><option>최근 2주</option><option>최근 1개월</option></select></div>
+    <div class="f-field"><label>대상 설비군</label><select style="width:130px"><option>RTP 전체</option><option>Implant</option><option>Deposition</option></select></div>
+    <div class="f-field"><label>예시 질의</label><select id="ex" style="width:150px" onchange="if(this.value)document.getElementById('q').value=this.value">
+      <option value="">선택...</option>
+      <option>M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘</option>
+      <option>DEP-03 결함 이슈 원인과 원가 영향 분석해줘</option></select></div>
+    <button class="btn-pri" id="run" onclick="runAnalysis()">분석 실행</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="pane">
+    <div class="pane-h"><span class="t">에이전트 파이프라인</span><span class="m">8 nodes</span></div>
+    <div class="nodes" id="nodes"></div>
+    <div class="log-h"><span class="t">실행 로그</span><span class="m" id="logn">0 lines</span></div>
+    <div class="logbox" id="logbox"></div>
+  </div>
+
+  <div class="rcol">
+    <div class="kpis" id="kpis"></div>
+    <div class="work">
+      <div class="tabs" id="tabs"></div>
+      <div class="tabc" data-t="0" id="t-report"></div>
+      <div class="tabc" data-t="1" id="t-evidence"></div>
+      <div class="tabc" data-t="2" id="t-cause"></div>
+      <div class="tabc" data-t="3" id="t-roi"></div>
+      <div class="tabc" data-t="4" id="t-valid"></div>
+    </div>
+  </div>
+</div>
+
+<div class="status">
+  <span><span class="dot"></span>연결됨</span>
+  <span id="dsrc">데이터소스: MES/FDC (시뮬레이션)</span>
+  <span class="num">마지막 실행 <span id="elapsed">—</span></span>
+  <span class="warn">HW FabOps · 합성 데이터 · 데모용</span>
+</div>
+
+<script>
+/* ── 연동 이음새: http 로 서빙되면 기본 API 모드(POST /api/analyze), 실패 시 목데이터로
+   자동 폴백. ?mock 쿼리스트링으로 강제 목데이터 모드. evidence.* 는 서버(api.py)가
+   그래프 상태(sql_results, retrieved_docs)와 cost_model 산출을 매핑해 채운다. */
+const USE_API = location.protocol.startsWith("http") && !new URLSearchParams(location.search).has("mock");
+
+const MOCK = {
+  query:"M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘",
+  confidence:"높음",
+  root_cause:"RTP-01의 peak_temp가 목표 1050℃ 대비 약 12℃ 상승하며 도펀트 과확산이 발생, sheet resistance가 스펙 상한(215Ω)을 이탈해 수율이 하락한 것으로 판단됩니다. FDC 로그의 승온 트렌드와 과거 동형 이슈(2025-Q3)가 일치하며, 대조 설비 RTP-02는 정상 범위입니다. 파이로미터 드리프트가 유력 원인입니다.",
+  kg_paths:[
+    "RTP-01 --관리파라미터--> peak_temp_C --상승시유발--> 도펀트 과확산 --변동시킴--> sheet_res_ohm",
+    "sheet_res_ohm --스펙이탈시--> 스크랩 --원가계정--> scrap_cost",
+    "peak_temp_C --점검항목--> 파이로미터 캘리브레이션",
+    "RTP-01 --대조설비--> RTP-02"],
+  cost_impact:{
+    affected_equip:"RTP-01", contrast_equip:"RTP-02", yield_loss_pp:5.92,
+    recent_wafers:200, lost_wafers:12, loss_krw:31200000, monthly_projection_krw:117000000,
+    anomaly_from:"2026-06-24",
+    formula:[
+      "손실 웨이퍼 12장 = 최근 투입 200장 × 수율하락 5.92%p",
+      "손실액 31,200,000원 = 12장 × 스크랩원가 2,600,000원/장",
+      "월 환산 117,000,000원 = 31,200,000원 ÷ 최근 8일 × 30일"],
+    assumptions:["기준수율 = 전반기(6/16~6/23) 평균, 최근수율 = 후반기 평균","손실 웨이퍼 = 최근 투입량 × 수율하락(pp), 전량 스크랩 가정(보수적)","재작업 회복·기회손실 미포함 — 실제 손실은 이보다 클 수 있음","월 환산 = 최근 기간 일평균 × 30일"],
+    improvement_options:[
+      {action:"파이로미터 재캘리브레이션 및 주기 단축",est_cost_krw:8000000,est_benefit_krw:105000000,roi_note:"월 손실의 90% 회복 가정 (과거 동형 이슈에서 정상화 검증)"},
+      {action:"FDC peak_temp 알람 상한 강화 (1055→1053℃)",est_cost_krw:2000000,est_benefit_krw:23000000,roi_note:"재발 시 감지 지연 80% 단축"},
+      {action:"대조 설비 편차 모니터링 자동화",est_cost_krw:5000000,est_benefit_krw:35000000,roi_note:"선행 지표화로 조기 대응"}],
+    daily_yield:{
+      "RTP-01":[96.2,96.5,96.8,96.2,96.5,96.8,96.2,96.5,88.0,88.5,89.0,88.0,88.5,89.0,88.0].map((y,i)=>({date:d6(i),yield_pct:y})),
+      "RTP-02":[96.0,96.3,96.6,96.0,96.3,96.6,96.0,96.3,96.6,96.0,96.3,96.6,96.0,96.3,96.6].map((y,i)=>({date:d6(i),yield_pct:y}))}},
+  evidence:{
+    param_trend:{param:"peak_temp_C", equip:"RTP-01", limit:1055,
+      points:[1050.0,1050.4,1050.8,1050.0,1050.4,1050.8,1050.0,1050.4,1062.0,1062.4,1062.8,1062.0,1062.4,1062.8,1062.0].map((v,i)=>({date:d6(i),value:v}))},
+    sql:[
+      {query:"SELECT date, equip_id, AVG(yield_pct) AS avg_yield, SUM(wafer_count) AS wafers FROM lot_yield WHERE process_step='RTP' GROUP BY date, equip_id ORDER BY date",
+       row_count:30, rows:[
+        {date:"2026-06-22",equip_id:"RTP-01",avg_yield:96.5,wafers:25},
+        {date:"2026-06-23",equip_id:"RTP-01",avg_yield:96.2,wafers:25},
+        {date:"2026-06-24",equip_id:"RTP-01",avg_yield:88.0,wafers:25},
+        {date:"2026-06-25",equip_id:"RTP-01",avg_yield:88.5,wafers:25},
+        {date:"2026-06-24",equip_id:"RTP-02",avg_yield:96.6,wafers:25},
+        {date:"2026-06-25",equip_id:"RTP-02",avg_yield:96.0,wafers:25}]},
+      {query:"SELECT ts, param, value FROM equipment_log WHERE equip_id='RTP-01' AND param='peak_temp_C' ORDER BY ts DESC LIMIT 14",
+       row_count:14, rows:[
+        {ts:"2026-06-30T02:00",param:"peak_temp_C",value:1062.0},
+        {ts:"2026-06-29T02:00",param:"peak_temp_C",value:1062.8},
+        {ts:"2026-06-28T02:00",param:"peak_temp_C",value:1062.4},
+        {ts:"2026-06-23T02:00",param:"peak_temp_C",value:1050.4},
+        {ts:"2026-06-22T02:00",param:"peak_temp_C",value:1050.0}]}],
+    docs:[
+      {source:"issue_rtp_peaktemp_2025.md",doctype:"이슈리포트",score:0.87,excerpt:"FDC 로그 분석 결과 peak_temp_C가 목표 1050℃ 대비 +10~12℃ 상승... 파이로미터 드리프트로 실제 온도가 설정보다 높게 인가됨"},
+      {source:"sop_rtp.md",doctype:"SOP",score:0.81,excerpt:"peak_temp_C: 목표 1050℃, 관리 상한 1055℃. 상한 초과 시 도펀트 과확산으로 sheet resistance 변동"},
+      {source:"fdc_alarm_guide.md",doctype:"가이드",score:0.66,excerpt:"peak_temp 상향 트렌드(RTP): 파이로미터 캘리브레이션 이력 우선 확인"}]},
+  actions:[
+    {type:"work_order",title:"파이로미터 재캘리브레이션 및 주기 단축",target_equip:"RTP-01",priority:"P1",est_cost_krw:8000000,rationale:"월 손실의 90% 회복 가정 (과거 동형 이슈에서 정상화 검증)",status:"draft"},
+    {type:"work_order",title:"FDC peak_temp 알람 상한 강화 (1055→1053℃)",target_equip:"RTP-01",priority:"P2",est_cost_krw:2000000,rationale:"감지 지연 80% 단축",status:"draft"},
+    {type:"alarm_change_request",target_equip:"RTP-01",param:"peak_temp_C",current_limit:1055,proposed_limit:1053,unit:"℃",rationale:"이상 재발 조기 감지를 위한 관리 상한 강화 (SOP·과거 이슈 조치 기준)",status:"draft"}],
+  report:["## 배경","M15 라인 RTP-01 설비에서 최근 2주간 로트 수율이 기준 대비 지속 하락하였다. 본 보고서는 원인 분석 결과와 재무 영향, 개선 우선순위를 보고한다.",
+    "## 원인 분석","FDC 로그 분석 결과 RTP-01의 peak_temp가 목표 1050℃ 대비 약 12℃ 상승하였다. 이로 인한 도펀트 과확산으로 sheet resistance가 스펙 상한(215Ω)을 이탈하였으며, 2025-Q3 동형 이슈와 동일한 메커니즘이다. 대조 설비 RTP-02는 정상 범위로, 설비 개별 요인(파이로미터 드리프트)이 유력하다.",
+    "## 재무 영향","| 구분 | 값 |","|---|---|","| 수율 하락 | 5.92%p (96.5% → 90.5%) |","| 손실 웨이퍼 | 12장 / 최근 투입 200장 |","| 손실액(스크랩 기준) | 31,200,000원 |","| 월 환산 손실 | 117,000,000원 |",
+    "전량 스크랩 가정의 보수적 추정이며, 재작업 회복과 기회손실은 미포함이다.",
+    "## 개선 권고 및 우선순위","1. 파이로미터 재캘리브레이션 및 주기 단축 — 투자 800만원, 월 1.05억원 회복 기대","2. FDC peak_temp 알람 상한 강화 — 투자 200만원","3. 대조 설비 편차 모니터링 자동화 — 투자 500만원",
+    "## 다음 단계","- 금주 내 파이로미터 캘리브레이션 실시 후 3일간 수율 회복 추이 검증","- FDC 알람 기준 변경은 공정기술팀 협의 후 차주 반영"].join("\n"),
+  critiques:[], validation:{"근거정합성":true,"수치정확성":true,"논리구조":true}, revision:2
+};
+function d6(i){const d=new Date(2026,5,16+i);return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+
+const NODES=["supervisor","retriever","data_analyst","root_cause","cost_impact","report_writer","validator","action_planner"];
+const TABS=["보고서","근거 데이터","원인 분석","개선안 ROI","검증 결과"];
+const fmt=n=>n.toLocaleString("ko-KR");
+const $=id=>document.getElementById(id);
+
+/* ── 파이프라인 노드 리스트 & 로그 ─────────────── */
+function drawNodes(states){
+  $("nodes").innerHTML = NODES.map(n=>{
+    const s = states?.[n]||"idle";
+    return `<div class="node-row ${s==='run'?'run':s==='done'?'done':''}">
+      <span class="st-dot"></span><span class="nm">${n}</span>
+      <span class="st">${s==='run'?'실행 중':s==='done'?'완료':'대기'}</span></div>`;
+  }).join("");
+}
+function addLog(node,msg,level){
+  const t=new Date(), ts=[t.getHours(),t.getMinutes(),t.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":");
+  $("logbox").insertAdjacentHTML("beforeend",
+    `<div class="lg ${level||''}"><span class="ts">${ts}</span><span class="nd">${node}</span><span class="ms">${msg}</span></div>`);
+  $("logbox").scrollTop = $("logbox").scrollHeight;
+  $("logn").textContent = $("logbox").children.length + " lines";
+}
+
+/* 실행 시퀀스 (데모 시뮬레이션 — 실연동 시 SSE 스트림으로 대체) */
+const SEQ=[
+  ["supervisor","처리 계획 수립 — 5단계","", {supervisor:"run"}],
+  ["supervisor","라우팅 → retriever","", {supervisor:"done",retriever:"run"}],
+  ["retriever","Chroma 유사도 검색 3건 · KG 인과경로 4건","", {}],
+  ["supervisor","라우팅 → data_analyst","", {retriever:"done",data_analyst:"run"}],
+  ["data_analyst","SQL 2건 실행 — lot_yield 30행 · equipment_log 14행","", {}],
+  ["supervisor","라우팅 → root_cause","", {data_analyst:"done",root_cause:"run"}],
+  ["root_cause","원인 가설 도출 — 확신도 높음","", {}],
+  ["supervisor","라우팅 → cost_impact","", {root_cause:"done",cost_impact:"run"}],
+  ["cost_impact","결정론 원가모델 계산 — 손실 31,200,000원","", {}],
+  ["supervisor","라우팅 → report_writer","", {cost_impact:"done",report_writer:"run"}],
+  ["report_writer","보고서 초안 작성 (rev 1)","", {report_writer:"done",validator:"run"}],
+  ["validator","근거정합성 PASS · 논리구조 PASS","", {}],
+  ["validator","수치정확성 FAIL — 월 환산 수치 불일치","warn", {}],
+  ["validator","재작성 요청 → report_writer (1/2)","warn", {validator:"idle",report_writer:"run"}],
+  ["report_writer","보고서 재작성 (rev 2)","", {report_writer:"done",validator:"run"}],
+  ["validator","재검증 3/3 PASS","ok", {validator:"done",action_planner:"run"}],
+  ["action_planner","조치 초안 3건 생성 — 작업오더 2·알람변경 1 (발행 시뮬레이션)","ok", {action_planner:"done"}],
+];
+
+let nodeStates={};
+async function runAnalysis(){
+  const btn=$("run"); btn.disabled=true; btn.textContent="실행 중...";
+  $("logbox").innerHTML=""; nodeStates={}; drawNodes(nodeStates);
+  drawKpis(null); TABS.forEach((_,i)=>{document.querySelector(`[data-t="${i}"]`).innerHTML=
+    `<div class="placeholder">에이전트 파이프라인 실행 중 — 좌측 실행 로그에서 진행 상황을 확인하세요</div>`});
+  const t0=performance.now();
+  const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 300000);
+  const apiP = USE_API ? fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({query:$("q").value}),signal:ctrl.signal}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}) : null;
+  for(const [node,msg,level,st] of SEQ){
+    await new Promise(r=>setTimeout(r,600));
+    Object.assign(nodeStates,st); drawNodes(nodeStates); addLog(node,msg,level);
+  }
+  let data;
+  if(USE_API){
+    addLog("system","백엔드 파이프라인 응답 대기 중...","");
+    try{ data = await apiP; $("dsrc").textContent="데이터소스: MES/FDC (시뮬레이션) · 라이브 파이프라인"; }
+    catch(e){ data = MOCK; addLog("system","API 미응답 — 목데이터로 폴백","warn"); $("dsrc").textContent="데이터소스: 목데이터 (API 미연결)"; }
+  } else { data = MOCK; }
+  $("elapsed").textContent = ((performance.now()-t0)/1000).toFixed(1)+"초";
+  renderResult(data);
+  btn.disabled=false; btn.textContent="분석 실행";
+}
+
+/* ── 결과 렌더 (API 응답과 동일 셰이프) ─────────── */
+function drawKpis(c){
+  const dim = !c;
+  const v=(x,cls)=>dim?`<div class="v dim">—</div>`:`<div class="v num ${cls||''}">${x}</div>`;
+  $("kpis").innerHTML=`
+    <div class="kpi"><div class="l">손실액 (최근 2주)</div>${v(c?fmt(c.loss_krw)+"원":null,"loss")}<div class="s">${c?c.affected_equip+" · 스크랩 기준":"&nbsp;"}</div></div>
+    <div class="kpi"><div class="l">월 환산 손실</div>${v(c?fmt(c.monthly_projection_krw)+"원":null,"loss")}<div class="s">현 추세 지속 가정</div></div>
+    <div class="kpi"><div class="l">수율 하락폭</div>${v(c?c.yield_loss_pp+"%p":null)}<div class="s">기준(전반기 평균) 대비</div></div>
+    <div class="kpi"><div class="l">손실 웨이퍼</div>${v(c?c.lost_wafers+"장":null)}<div class="s">${c?"최근 투입 "+fmt(c.recent_wafers)+"장 중":"&nbsp;"}</div></div>`;
+}
+
+function renderResult(d){
+  const c=d.cost_impact||{};
+  drawKpis(c);
+
+  $("t-report").innerHTML=`<div class="meta-row"><span class="a">경영 보고서 · rev ${d.revision||1}</span>
+    <span class="b">report_writer 생성 · 검증 ${Object.values(d.validation||{}).filter(Boolean).length}/3 통과</span></div>
+    <div class="doc">${md(d.report||"")}</div>`;
+
+  $("t-evidence").innerHTML = evidenceTab(d);
+
+  $("t-cause").innerHTML=`<div class="cause-h"><span class="t">원인 가설</span>
+      <span class="badge ${d.confidence==="높음"?"bg-hi":d.confidence==="중간"?"bg-md":"bg-lo"}">확신도 ${d.confidence||"—"}</span></div>
+    <p class="cause-p">${d.root_cause||""}</p>
+    <div class="cause-h"><span class="t">지식그래프 인과 경로</span></div>
+    ${(d.kg_paths||[]).map(p=>`<div class="kgp">${kgChips(p)}</div>`).join("")}`;
+
+  $("t-roi").innerHTML=`<div class="cause-h"><span class="t">개선안 및 투자 대비 효과</span></div>
+    <table class="roi"><tr><th>#</th><th>개선안</th><th style="text-align:right">투자비</th><th style="text-align:right">기대효과 (월)</th><th>ROI 근거</th></tr>
+    ${(c.improvement_options||[]).map((o,i)=>`<tr><td class="num">${i+1}</td><td><b>${o.action}</b></td>
+      <td class="r">${fmt(o.est_cost_krw)}원</td><td class="r gain">${fmt(o.est_benefit_krw)}원</td><td>${o.roi_note||""}</td></tr>`).join("")}</table>
+    <div class="assume"><div class="t">계산 가정</div><ul>${(c.assumptions||[]).map(a=>`<li>${a}</li>`).join("")}</ul></div>
+    <div class="cause-h" style="margin-top:24px"><span class="t">조치 초안 — 분석·실행 연계</span>
+      <span class="badge bg-md">발행 시뮬레이션</span></div>
+    ${(d.actions||[]).map(a=>a.type==="work_order"
+      ?`<div class="lens" style="max-width:860px"><div style="min-width:0">
+          <div class="n"><span class="badge bg-hi" style="margin-right:8px">작업오더 ${a.priority||""}</span>${a.title}</div>
+          <div class="d">대상 ${a.target_equip} · 예상 비용 ${fmt(a.est_cost_krw||0)}원 · ${a.rationale||""}</div></div>
+          <span class="badge" style="margin-left:auto;color:var(--t4);background:var(--bd2);border-color:var(--bd)">MES 발행 대기</span></div>`
+      :`<div class="lens" style="max-width:860px"><div style="min-width:0">
+          <div class="n"><span class="badge bg-lo" style="margin-right:8px">알람 변경 요청</span><span class="mono">${a.param}</span> 관리 상한 ${a.current_limit}${a.unit||""} → ${a.proposed_limit}${a.unit||""}</div>
+          <div class="d">대상 ${a.target_equip} · ${a.rationale||""}</div></div>
+          <span class="badge" style="margin-left:auto;color:var(--t4);background:var(--bd2);border-color:var(--bd)">FDC 반영 대기</span></div>`).join("")}`;
+
+  const lensDesc={"근거정합성":"보고서 주장이 검색 문서·조회 데이터에 실제로 뒷받침되는가","수치정확성":"보고서 수치가 결정론 원가모델 계산값과 일치하는가","논리구조":"배경→원인→재무영향→권고 흐름과 권고-원인 연결이 타당한가"};
+  $("t-valid").innerHTML=`<div class="cause-h"><span class="t">검증 렌즈</span></div>
+    ${Object.entries(d.validation||{}).map(([k,v])=>`<div class="lens"><div><div class="n">${k}</div><div class="d">${lensDesc[k]||""}</div></div>
+      <span class="badge ${v?"bg-hi":"bg-lo"}">${v?"PASS":"FAIL"}</span></div>`).join("")}
+    ${(d.critiques&&d.critiques.length)?`<div class="crit-bad">${d.critiques.join("<br>")}</div>`
+      :`<div class="crit-ok">지적사항 없음 — 재작성 루프 1회 수행 후 3개 렌즈 모두 통과</div>`}`;
+}
+
+/* ── 근거 데이터 탭 ────────────────────────────── */
+function evidenceTab(d){
+  const c=d.cost_impact||{}, ev=d.evidence||{};
+  const dy=c.daily_yield||{}, eq1=c.affected_equip, eq2=c.contrast_equip;
+  const s1=(dy[eq1]||[]).map(p=>p.yield_pct), s2=(dy[eq2]||[]).map(p=>p.yield_pct);
+  const rawDates=(dy[eq1]||[]).map(p=>p.date);            /* API=YYYY-MM-DD, 목=MM-DD 둘 다 수용 */
+  const dates=rawDates.map(x=>x.length>5?x.slice(5):x);
+  const anomIdx = rawDates.findIndex(x=>(x.length>5?x:("2026-"+x))>=(c.anomaly_from||""));
+  const pt=ev.param_trend||{}, s3=(pt.points||[]).map(p=>p.value);
+
+  return `
+  <div class="ev-sec"><div class="t">원천 데이터 트렌드</div>
+    <div class="d">결론의 기반이 된 MES/FDC 조회 결과를 시각화한 것입니다. 음영 구간이 이상 발생 구간입니다.</div>
+    <div class="charts">
+      <div class="chart-card"><div class="ct">일별 수율 (%)</div>
+        <div class="cl"><i style="--c:#D92D20">${eq1||""} (이상)</i><i style="--c:#8B95A1">${eq2||""} (대조)</i></div>
+        ${lineChart([{c:"#D92D20",pts:s1},{c:"#8B95A1",pts:s2}],dates,anomIdx,null)}</div>
+      <div class="chart-card"><div class="ct">${pt.equip||""} ${pt.param||""} (℃)</div>
+        <div class="cl"><i style="--c:#F79009">실측</i><i style="--c:#D92D20">관리 상한 ${pt.limit||""}℃</i></div>
+        ${lineChart([{c:"#F79009",pts:s3}],dates,anomIdx,pt.limit)}</div>
+    </div></div>
+  <div class="ev-sec"><div class="t">원가 산출 로직 (결정론 모델)</div>
+    <div class="d">LLM이 아닌 Python 원가모델이 계산한 산식입니다. 보고서의 수치는 검증 단계에서 이 값과 대조됩니다.</div>
+    <div class="formula">${(c.formula||[]).map((f,i)=>`<div class="f-step"><span class="no">${i+1}</span><span class="fx num">${f}</span></div>`).join("")}</div></div>
+  <div class="ev-sec"><div class="t">실행된 SQL 및 조회 결과</div>
+    <div class="d">data_analyst 노드가 실제 실행한 읽기전용 쿼리와 결과입니다 (일부 행 표시).</div>
+    ${(ev.sql||[]).map(q=>`<details class="sqlq" open><summary>${q.query}<span class="cnt">${q.row_count}행</span></summary>
+      <div class="grid">${dataTable(q.rows||[])}</div></details>`).join("")}</div>
+  <div class="ev-sec"><div class="t">참조 문서 (RAG 검색 결과)</div>
+    <div class="d">retriever 노드가 벡터 유사도로 검색한 지식베이스 문서입니다. 막대는 유사도 점수입니다.</div>
+    ${(ev.docs||[]).map(x=>`<div class="docrow"><span class="fn">${x.source}</span><span class="dt">${x.doctype}</span>
+      <span class="ex">"${x.excerpt}"</span>
+      <span class="sc"><span class="bar"><i style="width:${Math.round(x.score*100)}%"></i></span><span class="sv">${x.score.toFixed(2)}</span></span></div>`).join("")}</div>`;
+}
+
+function dataTable(rows){
+  if(!rows.length) return "";
+  const cols=Object.keys(rows[0]);
+  return `<table class="data"><tr>${cols.map(h=>`<th>${h}</th>`).join("")}</tr>
+    ${rows.map(r=>`<tr>${cols.map(h=>`<td>${r[h]}</td>`).join("")}</tr>`).join("")}</table>`;
+}
+
+/* 경량 SVG 라인차트 — 외부 라이브러리 없이 근거 시각화 */
+function lineChart(series,labels,anomIdx,refY){
+  const W=420,H=150,P={l:38,r:8,t:8,b:20};
+  const all=series.flatMap(s=>s.pts).concat(refY?[refY]:[]);
+  if(!all.length) return "";
+  let lo=Math.min(...all),hi=Math.max(...all); const pad=(hi-lo)*0.15||1; lo-=pad; hi+=pad;
+  const n=Math.max(...series.map(s=>s.pts.length));
+  const X=i=>P.l+(W-P.l-P.r)*i/(n-1), Y=v=>P.t+(H-P.t-P.b)*(1-(v-lo)/(hi-lo));
+  let g="";
+  for(let k=0;k<4;k++){const y=P.t+(H-P.t-P.b)*k/3, v=hi-(hi-lo)*k/3;
+    g+=`<line x1="${P.l}" y1="${y}" x2="${W-P.r}" y2="${y}" stroke="#F2F4F6"/><text x="${P.l-5}" y="${y+3.5}" text-anchor="end" font-size="9" fill="#A9B2BC" font-family="JetBrains Mono">${v.toFixed(v>=100?0:1)}</text>`;}
+  let shade="";
+  if(anomIdx>0&&anomIdx<n) shade=`<rect x="${X(anomIdx)}" y="${P.t}" width="${W-P.r-X(anomIdx)}" height="${H-P.t-P.b}" fill="#FDEBEA" opacity=".45"/>`;
+  let ref="";
+  if(refY) ref=`<line x1="${P.l}" y1="${Y(refY)}" x2="${W-P.r}" y2="${Y(refY)}" stroke="#D92D20" stroke-width="1" stroke-dasharray="4 3"/>`;
+  const lines=series.map(s=>`<polyline fill="none" stroke="${s.c}" stroke-width="1.8" stroke-linejoin="round"
+    points="${s.pts.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")}"/>`).join("");
+  const xl=[0,Math.floor((n-1)/2),n-1].map(i=>`<text x="${X(i)}" y="${H-5}" text-anchor="middle" font-size="9" fill="#A9B2BC" font-family="JetBrains Mono">${labels[i]||""}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${shade}${g}${ref}${lines}${xl}</svg>`;
+}
+
+/* KG 경로: 칩 + 관계 라벨 화살표 */
+function kgChips(path){
+  return path.split("-->").map(seg=>{
+    const m=seg.match(/^(.*?)--(.*)$/s), ent=(m?m[1]:seg).trim(), rel=m?m[2].trim():null;
+    const cls=/^[A-Za-z0-9_\-]+$/.test(ent)?"id":/(스크랩|재작업|손실)/.test(ent)?"loss":"";
+    let h=`<span class="kgn ${cls}">${ent}</span>`;
+    if(rel!==null) h+=`<span class="kgar"><span class="rl">${rel}</span>
+      <svg width="40" height="7"><line x1="0" y1="3.5" x2="33" y2="3.5" stroke="#B0B8C1" stroke-width="1.2"/><path d="M33 0.5 L39 3.5 L33 6.5 Z" fill="#B0B8C1"/></svg></span>`;
+    return h;
+  }).join("");
+}
+
+/* 초소형 마크다운: ##, 표, 번호/불릿 목록, 문단 */
+function md(src){
+  const L=src.split("\n"); let out=[],tbl=[],ol=[],ul=[];
+  const fT=()=>{if(!tbl.length)return;const rs=tbl.filter(r=>!/^\|[\s\-|]+\|$/.test(r)).map(r=>r.split("|").slice(1,-1).map(c=>c.trim()));
+    out.push("<table><tr>"+rs[0].map(c=>`<th>${c}</th>`).join("")+"</tr>"+rs.slice(1).map(r=>"<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>").join("")+"</table>");tbl=[];};
+  const fL=()=>{if(ol.length){out.push("<ol>"+ol.map(x=>`<li>${x}</li>`).join("")+"</ol>");ol=[];}
+    if(ul.length){out.push("<ul>"+ul.map(x=>`<li>${x}</li>`).join("")+"</ul>");ul=[];}};
+  for(const ln of L){
+    if(/^\|/.test(ln)){fL();tbl.push(ln);continue}fT();
+    const mo=ln.match(/^(\d+)\. (.*)/),mu=ln.match(/^- (.*)/);
+    if(/^## /.test(ln)){fL();out.push(`<h2>${ln.slice(3)}</h2>`)}
+    else if(mo)ol.push(mo[2]); else if(mu)ul.push(mu[1]);
+    else if(ln.trim()){fL();out.push(`<p>${ln}</p>`)}
+  }
+  fT();fL();return out.join("");
+}
+
+/* ── init: 탭 + 데모 편의상 완료 상태로 로드 ───── */
+$("tabs").innerHTML=TABS.map((t,i)=>`<div class="tab ${i===0?"on":""}" data-i="${i}">${t}</div>`).join("");
+document.querySelectorAll(".tab").forEach(el=>el.addEventListener("click",()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  document.querySelectorAll(".tabc").forEach(x=>x.classList.remove("on"));
+  el.classList.add("on");document.querySelector(`[data-t="${el.dataset.i}"]`).classList.add("on");
+}));
+document.querySelector('[data-t="0"]').classList.add("on");
+$("q").addEventListener("keydown",e=>{if(e.key==="Enter")runAnalysis()});
+nodeStates=Object.fromEntries(NODES.map(n=>[n,"done"]));drawNodes(nodeStates);
+addLog("system","이전 세션 결과 로드됨 (예시)","");
+renderResult(MOCK);
+</script>
+</body>
+</html>

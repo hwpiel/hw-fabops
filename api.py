@@ -1,0 +1,126 @@
+"""FastAPI 서버 — 콘솔 UI 와 LangGraph 파이프라인을 잇는다.
+
+POST /api/analyze : 질의를 그래프로 완주시키고, 최종 상태를 UI 데이터 계약
+                    (ui/index.html 의 MOCK 과 동일 셰이프)으로 매핑해 반환
+GET  /            : ui/ 정적 서빙 (단일 페이지 콘솔)
+
+실행:  uvicorn api:app --port 8796   (또는 python api.py)
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from src import scenario
+from src.graph import build_graph
+from src.nodes.action_planner import PARAM_LIMITS, _managed_params
+from src.tools import run_sql
+
+ROOT = Path(__file__).resolve().parent
+
+app = FastAPI(title="hw-fabops API")
+GRAPH = build_graph()
+
+
+class AnalyzeIn(BaseModel):
+    query: str
+
+
+class ScenarioIn(BaseModel):
+    equip_id: str
+    yield_drop_pp: float = 6.0
+    days: int = 6
+
+
+def _confidence(root_cause: str) -> str:
+    m = re.search(r"확신\s*(?:정도|도)?\s*[::]?\s*(높음|중간|낮음)", root_cause or "")
+    return m.group(1) if m else "중간"
+
+
+def _evidence(state: dict) -> dict:
+    """그래프 상태의 근거(sql_results·retrieved_docs)와 FDC 트렌드를 UI 계약으로 매핑."""
+    sql = [
+        {
+            "query": q,
+            "row_count": len(rows) if isinstance(rows, list) else 0,
+            "rows": rows[:8] if isinstance(rows, list) else [{"error": str(rows)}],
+        }
+        for q, rows in (state.get("sql_results") or {}).items()
+        if not q.startswith("_")
+    ]
+    docs = [
+        {
+            "source": d.get("metadata", {}).get("source", "?"),
+            "doctype": d.get("metadata", {}).get("doctype", "?"),
+            "score": float(d.get("score", 0.0)),
+            "excerpt": (d.get("text", "") or "")[:150].replace("\n", " "),
+        }
+        for d in (state.get("retrieved_docs") or [])
+    ]
+
+    param_trend = {}
+    equip = (state.get("cost_impact") or {}).get("affected_equip")
+    if equip:
+        for p in _managed_params(equip):
+            try:
+                rows = run_sql(
+                    f"SELECT ts, value FROM equipment_log WHERE equip_id='{equip}' AND param='{p}' ORDER BY ts"
+                )
+            except Exception:
+                rows = []
+            if rows:
+                param_trend = {
+                    "param": p,
+                    "equip": equip,
+                    "limit": PARAM_LIMITS.get(p, {}).get("current"),
+                    "points": [{"date": r["ts"][5:10], "value": r["value"]} for r in rows],
+                }
+                break
+
+    return {"sql": sql, "docs": docs, "param_trend": param_trend}
+
+
+@app.post("/api/analyze")
+def analyze(body: AnalyzeIn):
+    state = GRAPH.invoke(
+        {"query": body.query, "revision_count": 0}, {"recursion_limit": 40}
+    )
+    return {
+        "query": body.query,
+        "plan": state.get("plan", []),
+        "root_cause": state.get("root_cause", ""),
+        "confidence": _confidence(state.get("root_cause", "")),
+        "kg_paths": state.get("kg_paths", []),
+        "cost_impact": state.get("cost_impact", {}),
+        "report": state.get("report", ""),
+        "critiques": state.get("critiques", []),
+        "validation": state.get("validation", {}),
+        "revision": state.get("revision_count", 0) + 1,
+        "actions": state.get("actions", []),
+        "evidence": _evidence(state),
+    }
+
+
+@app.post("/api/scenario")
+def scenario_inject(body: ScenarioIn):
+    """Fab Data Gateway — 데모 중 새 이상 시나리오를 실시간 주입."""
+    return scenario.inject(body.equip_id, body.yield_drop_pp, body.days)
+
+
+@app.post("/api/scenario/reset")
+def scenario_reset():
+    """기준 시드 데이터로 복원."""
+    return scenario.reset()
+
+
+app.mount("/", StaticFiles(directory=str(ROOT / "ui"), html=True), name="ui")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8796)
