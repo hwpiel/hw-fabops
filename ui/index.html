@@ -223,6 +223,13 @@ table.roi td.gain{color:var(--ok);font-weight:700}
 .ifc-card .nm .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
 .ifc-card .meta{font-size:11.5px;color:var(--t4);margin-top:6px;line-height:1.75}
 .ifc-card .meta b{color:var(--t2);font-weight:600;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px}
+ol.gsteps{margin:10px 0 4px 2px;counter-reset:g;list-style:none;display:flex;flex-direction:column;gap:7px}
+ol.gsteps li{position:relative;padding-left:30px;font-size:13px;color:var(--t2);line-height:1.65}
+ol.gsteps li::before{counter-increment:g;content:counter(g);position:absolute;left:0;top:2px;width:20px;height:20px;border-radius:50%;background:var(--pri-bg);color:var(--pri-d);font-family:var(--mono);font-size:10.5px;font-weight:600;display:grid;place-items:center}
+.mini{border:1px dashed var(--bd-in);border-radius:10px;padding:14px;margin:12px 0 4px;background:#FCFDFD;position:relative}
+.mini::before{content:"화면 예시";position:absolute;top:-8px;left:12px;background:#FCFDFD;padding:0 6px;font-size:10px;font-weight:700;color:var(--t5);letter-spacing:.05em}
+.gnote{font-size:12px;color:var(--warn);background:var(--warn-bg);border:1px solid #F5E1BE;border-radius:8px;padding:8px 12px;margin-top:12px}
+.gk{font-family:var(--mono);font-size:11px;background:var(--bd2);border-radius:4px;padding:1px 6px;color:var(--t2)}
 .gw-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .gw-log{margin-top:12px;background:#F9FAFB;border:1px solid var(--bd2);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:10.5px;line-height:1.8;max-height:120px;overflow-y:auto;color:var(--t3)}
 .type-badge{font-size:10.5px;font-weight:700;border-radius:5px;padding:2px 8px;background:var(--bd2);color:var(--t3)}
@@ -262,6 +269,10 @@ table.roi td.gain{color:var(--ok);font-weight:700}
   <div class="snav-item" data-view="interface" title="연계 시스템 현황">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3.2-3.2M20 16H7l3.2 3.2"/></svg>
     <span>연계 시스템 현황</span></div>
+  <div class="snav-cap">지원</div>
+  <div class="snav-item" data-view="guide" title="사용 가이드">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 012-2h13v14H6a2 2 0 00-2 2zm0 0a2 2 0 002 2h13"/><path d="M9 7h6"/></svg>
+    <span>사용 가이드</span></div>
   <div class="snav-foot">hw-fabops · console</div>
 </nav>
 <div class="content">
@@ -324,6 +335,10 @@ table.roi td.gain{color:var(--ok);font-weight:700}
 <div class="view" id="view-interface">
   <div class="vhead"><div class="crumb">데이터 <i>›</i> <b>연계 시스템 현황</b></div><h1>연계 시스템 현황</h1></div>
   <div class="vbody" id="vb-interface"></div>
+</div>
+<div class="view" id="view-guide">
+  <div class="vhead"><div class="crumb">지원 <i>›</i> <b>사용 가이드</b></div><h1>사용 가이드</h1></div>
+  <div class="vbody" id="vb-guide"></div>
 </div>
 
 </div>
@@ -648,6 +663,7 @@ function switchView(v){
     else if(v==="process") renderProcessView();
     else if(v==="data") renderDataView();
     else if(v==="interface") renderInterfaceView();
+    else if(v==="guide") renderGuideView();
   }
 }
 document.querySelectorAll(".snav-item").forEach(el=>el.addEventListener("click",()=>switchView(el.dataset.view)));
@@ -873,6 +889,94 @@ async function gwInject(){
 async function gwReset(){
   try{ await fetch("/api/scenario/reset",{method:"POST"}); gwLogLine("기준 데이터 복원 완료"); loadIfc(); }
   catch(e){ gwLogLine("복원 실패: "+e.message); }
+}
+
+/* 사용 가이드 — 화면별 사용법. 예시는 실제 UI 컴포넌트를 재사용해 렌더링한다. */
+function renderGuideView(){
+  $("vb-guide").innerHTML=`
+  <div class="vcard"><div class="t">기본 사용 흐름</div>
+    <div class="d">이 콘솔은 설비 이슈를 질문 한 번으로 원인·손실액·보고서·조치 초안까지 받아보는 도구입니다.</div>
+    <ol class="gsteps">
+      <li>좌측 메뉴에서 <b>AI 이슈 분석</b>을 열고, 상단 입력창에 자연어로 질의합니다 (예시 질의 드롭다운 활용)</li>
+      <li><span class="gk">분석 실행</span> 버튼 또는 <span class="gk">Enter</span> — 좌측 파이프라인이 순차 실행됩니다 (라이브 2~3분)</li>
+      <li>완료되면 KPI와 5개 결과 탭이 채워집니다 — 보고서보다 <b>근거 데이터 탭을 먼저</b> 확인하는 것을 권장합니다</li>
+      <li>개선안 ROI 탭의 조치 초안을 검토합니다 — 발행은 자동이 아니라 담당자 승인 후입니다 (human-in-the-loop)</li>
+    </ol></div>
+
+  <div class="vcard"><div class="t">화면 1 — AI 이슈 분석: 입력과 파이프라인</div>
+    <div class="d">좌측 패널은 8개 에이전트 노드의 실행 상태와 로그를 보여줍니다.</div>
+    <div class="mini" style="max-width:340px">
+      <div class="node-row done"><span class="st-dot"></span><span class="nm">retriever</span><span class="st">완료</span></div>
+      <div class="node-row run"><span class="st-dot"></span><span class="nm">data_analyst</span><span class="st">실행 중</span></div>
+      <div class="node-row"><span class="st-dot"></span><span class="nm">root_cause</span><span class="st">대기</span></div>
+    </div>
+    <ol class="gsteps">
+      <li>상태 도트: 회색=대기 · 주황 점멸=실행 중 · 초록=완료. validator에서 주황 경고 로그가 뜨면 보고서가 반려되어 재작성 중이라는 뜻입니다</li>
+      <li>실행 로그에 각 노드의 작업 내용이 타임스탬프와 함께 쌓입니다 — 데모 시연 시 이 로그를 보여주며 설명하면 효과적입니다</li>
+      <li>최근 분석 이력은 이 브라우저의 최근 3건입니다. 전체 이력은 Raw 데이터 조회의 <span class="gk">audit_runs</span> 테이블에서 확인합니다</li>
+    </ol>
+    <div class="gnote">라이브 분석은 2~3분 걸립니다. 백엔드 미연결 상태면 자동으로 목데이터 결과로 대체되고 하단 상태바에 표시됩니다.</div></div>
+
+  <div class="vcard"><div class="t">화면 1 — 결과 탭 읽는 법</div>
+    <div class="d">상단 KPI 4개는 손실액·월 환산·수율 하락폭·손실 웨이퍼입니다. 그 아래 5개 탭:</div>
+    <table class="data" style="white-space:normal"><tr><th>탭</th><th>무엇을 보나</th><th>체크포인트</th></tr>
+      <tr><td style="font-family:var(--sans);font-weight:600">보고서</td><td style="font-family:var(--sans)">결재 가능한 수준의 경영 보고서 초안</td><td style="font-family:var(--sans)">rev 번호(재작성 횟수), 상단 메타의 검증 통과·모델·run ID</td></tr>
+      <tr><td style="font-family:var(--sans);font-weight:600">근거 데이터</td><td style="font-family:var(--sans)">결론의 원천 — 수율/파라미터 차트, 원가 산식, 실행 SQL, 참조 문서</td><td style="font-family:var(--sans)">차트의 붉은 음영=이상 구간, 점선=관리 상한. 산식 1행의 σ 배수(3σ 이상=유의)</td></tr>
+      <tr><td style="font-family:var(--sans);font-weight:600">원인 분석</td><td style="font-family:var(--sans)">원인 가설 + 지식그래프 인과 경로</td><td style="font-family:var(--sans)">확신도 배지, 인과 사슬이 데이터와 맞는지</td></tr>
+      <tr><td style="font-family:var(--sans);font-weight:600">개선안 ROI</td><td style="font-family:var(--sans)">개선안별 투자·기대효과 + 조치 초안</td><td style="font-family:var(--sans)">계산 가정 목록, 조치의 "발행 대기" 상태(자동 발행 아님)</td></tr>
+      <tr><td style="font-family:var(--sans);font-weight:600">검증 결과</td><td style="font-family:var(--sans)">품질 게이트 판정 내역</td><td style="font-family:var(--sans)">FAIL이 있으면 지적사항을 반드시 읽을 것</td></tr></table>
+    <div class="mini">
+      <div class="f-step"><span class="no">1</span><span class="fx num">이상 판정: 하락 5.92%p = 기준기간 σ(0.229%p)의 25.8배 ≥ 3σ → 통계적으로 유의</span></div>
+    </div>
+    <ol class="gsteps">
+      <li>근거 데이터 탭의 산식은 LLM이 아닌 결정론 코드가 계산한 값입니다 — 보고서 수치와 다르면 검증 탭에서 반려됐는지 확인하세요</li>
+      <li>참조 문서의 막대는 벡터 유사도 점수입니다. 낮은 점수(0.5 미만)의 문서만 근거라면 결론을 의심하세요</li>
+    </ol></div>
+
+  <div class="vcard"><div class="t">화면 1 — 인과 경로와 검증 배지</div>
+    <div class="mini">${kgChips("RTP-01 --관리파라미터--> peak_temp_C --상승시유발--> 도펀트 과확산 --변동시킴--> sheet_res_ohm")}</div>
+    <ol class="gsteps">
+      <li>파란 칩=설비·파라미터 식별자, 빨간 칩=손실·폐기 이벤트, 회색 칩=개념. 화살표 위 글자가 관계입니다</li>
+      <li>이 경로는 지식 맵 정의서의 관계를 질의 기준으로 자동 탐색한 것입니다 — 정의에 없는 인과는 나타나지 않습니다</li>
+    </ol>
+    <div class="mini" style="max-width:520px">
+      <div class="lens"><div><div class="n">수치정확성</div><div class="d">보고서 수치가 결정론 원가모델 계산값과 일치하는가</div></div><span class="badge bg-hi">PASS</span></div>
+    </div>
+    <ol class="gsteps">
+      <li>검증은 3개 기준(근거정합성·수치정확성·논리구조)의 루브릭 채점입니다. 하나라도 FAIL이면 재작성이 최대 2회 수행되고, 그래도 미흡하면 한계가 명시된 채 종료됩니다 — 통과로 위장하지 않습니다</li>
+    </ol></div>
+
+  <div class="vcard"><div class="t">화면 2·3 — 정의서 (지식 맵 / 프로세스)</div>
+    <ol class="gsteps">
+      <li><b>지식 맵 정의서</b>: 인과 경로 탐색의 기준정보입니다. 신규 공정·설비 도입 시 엔티티와 관계를 여기에 추가해야 분석이 해당 인과를 탈 수 있습니다</li>
+      <li><b>프로세스 정의서</b>: 파이프라인의 노드 명세·라우팅 규칙·안전장치 명세입니다. 흐름도의 파랑=LLM 노드, 초록=결정론 노드, 주황=품질 게이트(순환)</li>
+      <li>감사나 시스템 인수인계 시 이 두 정의서가 기준 문서 역할을 합니다</li>
+    </ol></div>
+
+  <div class="vcard"><div class="t">화면 4 — Raw 데이터 조회</div>
+    <ol class="gsteps">
+      <li>테이블을 선택하고 <span class="gk">조회</span> — 분석이 사용한 것과 동일한 원본 레코드를 직접 볼 수 있습니다 (읽기전용)</li>
+      <li><span class="gk">audit_runs</span> 테이블에서 모든 분석 실행 이력(누가 언제 무엇을 물었고 어떤 결론·검증이 나왔는지)을 조회합니다</li>
+      <li>분석 결과가 의심되면 이 화면에서 원본을 직접 대조하는 것이 이 시스템의 의도된 사용법입니다</li>
+    </ol></div>
+
+  <div class="vcard"><div class="t">화면 5 — 연계 시스템 현황과 데모 시나리오</div>
+    <div class="d">원천 시스템 수신 상태를 확인하고, Fab Data Gateway로 새 이상 상황을 만들어볼 수 있습니다.</div>
+    <ol class="gsteps">
+      <li>게이트웨이에서 대상 설비(예: IMP-02)·수율 하락폭(예: 8%p)·기간을 지정하고 <span class="gk">이상 주입</span></li>
+      <li>AI 이슈 분석으로 이동해 "IMP-02 수율 이슈 원인과 재무 영향 분석해줘"를 실행합니다</li>
+      <li>분석기가 방금 주입한 이상을 스스로 찾아내는지 확인합니다 — 근거 데이터 탭에서 주입된 날짜의 데이터가 보입니다</li>
+      <li>시연이 끝나면 <span class="gk">기준 복원</span>으로 원래 데이터로 되돌립니다</li>
+    </ol>
+    <div class="gnote">이 시나리오가 이 데모의 핵심 증명입니다 — 답을 미리 심어둔 시연이 아니라, 임의의 새 이상도 스스로 찾아낸다는 것.</div></div>
+
+  <div class="vcard"><div class="t">팁</div>
+    <ol class="gsteps">
+      <li>주소 뒤에 <span class="gk">?mock</span>을 붙이면 백엔드 호출 없이 목데이터로 즉시 시연됩니다 (화면 구성 확인용)</li>
+      <li>화면이 이상하면 <span class="gk">Ctrl+Shift+R</span> (강력 새로고침) — 브라우저 캐시가 옛 버전을 보여줄 수 있습니다</li>
+      <li>보고서 인쇄 버튼은 결과 탭 내용을 인쇄용 레이아웃으로 출력합니다</li>
+      <li>좌측 최상단 햄버거 버튼으로 메뉴를 접으면 넓은 화면으로 볼 수 있습니다</li>
+    </ol></div>`;
 }
 
 /* ── init: 탭 + 데모 편의상 완료 상태로 로드 ───── */
