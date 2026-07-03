@@ -732,7 +732,7 @@ function renderProcessView(){
     ["root_cause","LLM","0.2","문서·인과경로·데이터를 종합해 원인 가설과 확신도 제시","retrieved_docs, kg_paths, sql_results","root_cause","—"],
     ["cost_impact","결정론+LLM","0.2","손실액·월환산은 Python 산식(cost_model), LLM은 개선안 도출만 — 수치 변경 금지","root_cause, DB","cost_impact","개선안 파싱 실패 → 수동 검토 플래그"],
     ["report_writer","LLM","0.3","배경·원인·재무·권고·다음단계 구조의 보고서. 반려 지적 반영 재작성","전체 상태 + critiques","report","출력 폭주 반복 새니타이저 적용"],
-    ["validator","LLM 판정","0.0","근거정합성·수치정확성·논리구조 3렌즈 채점, 반려/통과 결정","report, 근거 일체","critiques, validation, next","판정 파싱 2회 실패 → 검증 불능 명시 (자동 통과 금지)"],
+    ["validator","LLM 판정","0.0","기준 분리 루브릭(LLM-as-judge) — 근거정합성·수치정확성·논리구조 3기준 채점, 반려/통과 결정","report, 근거 일체","critiques, validation, next","판정 파싱 2회 실패 → 검증 불능 명시 (자동 통과 금지)"],
     ["action_planner","결정론","—","개선안→MES 작업오더 초안, 지식 맵 관리 파라미터→FDC 알람변경 초안","cost_impact","actions","개선안 없으면 알람변경 초안만 생성"]];
 
   const stateFields=[
@@ -760,6 +760,7 @@ function renderProcessView(){
     ["판정 파싱 2회 실패","action_planner (검증 불능 명시 — 자동 통과 금지)"]];
 
   const guards=[
+    ["HITL 승인 게이트","조치는 초안(draft)까지만 자동 생성 — MES/FDC 발행은 사람 승인 후 (human-in-the-loop)","action_planner"],
     ["SQL 읽기전용 가드","SELECT/WITH만 허용, 다중 구문 차단, 결과 50행 제한","data_analyst"],
     ["출력 새니타이저","표 구분선 등 문자 폭주 반복 압축 (출력 토큰 소진 방지)","report_writer"],
     ["재작성 상한","순환 2회 제한 — 초과 시 한계 명시 후 진행 (무한루프 차단)","validator"],
