@@ -291,6 +291,8 @@ table.roi td.gain{color:var(--ok);font-weight:700}
     <div class="nodes" id="nodes"></div>
     <div class="log-h"><span class="t">실행 로그</span><span class="m" id="logn">0 lines</span></div>
     <div class="logbox" id="logbox"></div>
+    <div class="log-h"><span class="t">최근 분석 이력</span></div>
+    <div class="logbox" id="hist" style="flex:none;max-height:74px"></div>
   </div>
 
   <div class="rcol">
@@ -467,7 +469,24 @@ async function runAnalysis(){
   } else { data = MOCK; }
   $("elapsed").textContent = ((performance.now()-t0)/1000).toFixed(1)+"초";
   renderResult(data);
+  if(data && data.cost_impact && data.cost_impact.loss_krw) pushHist(q, data.cost_impact.loss_krw);
   btn.disabled=false; btn.textContent="분석 실행";
+}
+
+/* 최근 분석 이력 (로컬 저장, 최대 3건) */
+function pushHist(q, loss){
+  try{
+    const h=JSON.parse(localStorage.getItem("fabops-hist")||"[]");
+    h.unshift({t:new Date().toTimeString().slice(0,5), q:q.slice(0,24), l:loss});
+    localStorage.setItem("fabops-hist", JSON.stringify(h.slice(0,3)));
+  }catch(e){}
+  drawHist();
+}
+function drawHist(){
+  let h=[]; try{ h=JSON.parse(localStorage.getItem("fabops-hist")||"[]"); }catch(e){}
+  $("hist").innerHTML = h.length
+    ? h.map(x=>`<div class="lg"><span class="ts">${x.t}</span><span class="ms">${x.q}… · 손실 ${fmt(x.l)}원</span></div>`).join("")
+    : `<div class="lg"><span class="ms" style="color:var(--t5)">이력 없음</span></div>`;
 }
 
 /* ── 결과 렌더 (API 응답과 동일 셰이프) ─────────── */
@@ -663,25 +682,120 @@ async function renderOntologyView(){
       ${rels.map(r=>`<tr><td>${r[0]}</td><td style="color:var(--pri-d)">${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</table></div>`;
 }
 
-/* 프로세스 정의서 — 파이프라인의 단계·방식·입출력 */
+/* 프로세스 정의서 — 실행 흐름도 + 노드/상태/라우팅/예외 명세 */
 function renderProcessView(){
-  const steps=[
-    ["supervisor","라우팅","LLM+규칙","질의 해석 후 처리 계획 수립, 상태의 빈 칸 순서로 전문 노드 라우팅","질의 → 처리 계획·다음 노드"],
-    ["retriever","지식 수집","임베딩+그래프","벡터 유사도(Chroma)와 지식 맵 인과 경로의 하이브리드 검색","질의 → 관련 문서·인과 경로"],
-    ["data_analyst","데이터 조회","LLM+SQL 가드","스키마 기반 SELECT 생성, 읽기전용 실행 (MES/FDC/계측)","질의 → 조회 결과셋"],
-    ["root_cause","원인 규명","LLM","문서·경로·데이터를 종합한 원인 가설과 확신도 제시","근거 → 원인 가설"],
-    ["cost_impact","원가 정량화","결정론+LLM","손실액은 Python 산식이 계산, LLM은 개선안 도출만 (수치 변경 금지)","수율 하락 → 손실액·ROI"],
-    ["report_writer","보고서 작성","LLM","배경·원인·재무·권고 구조의 경영 보고서 초안","전체 상태 → 보고서"],
-    ["validator","다면 검증","LLM 판정","근거정합성·수치정확성·논리구조 3렌즈. 미흡 시 재작성 반려 (상한 2회)","보고서 → 통과/반려"],
-    ["action_planner","조치 생성","결정론","개선안을 MES 작업오더·FDC 알람변경 초안으로 변환 (감사 가능)","개선안 → 조치 초안"]];
+  const B="#E8F1FE",BS="#1B64DA",G="#F0FAF4",GS="#12B76A",A="#FFF6E8",AS="#F79009";
+  const flow=`<svg viewBox="0 0 860 400" style="width:100%;max-width:900px;display:block" font-family="Pretendard Variable,sans-serif">
+    <defs><marker id="pfa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8B95A1"/></marker>
+    <marker id="pfw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${AS}"/></marker></defs>
+    <rect x="18" y="62" width="64" height="34" rx="17" fill="#F2F4F6" stroke="#D8DEE5"/><text x="50" y="83" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#4E5968">START</text>
+    <line x1="82" y1="79" x2="114" y2="79" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <rect x="118" y="44" width="138" height="70" rx="8" fill="${B}" stroke="${BS}" stroke-width="1.1"/>
+    <text x="187" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="12" font-weight="600" fill="${BS}">supervisor</text>
+    <text x="187" y="92" text-anchor="middle" font-size="10" fill="#4E5968">계획 수립 · 라우팅</text>
+    <line x1="256" y1="66" x2="334" y2="66" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <line x1="334" y1="94" x2="256" y2="94" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <text x="295" y="56" text-anchor="middle" font-size="9.5" fill="#8B95A1">라우팅 / 복귀 반복</text>
+    <rect x="336" y="16" width="240" height="224" rx="10" fill="none" stroke="#D8DEE5" stroke-dasharray="4 3"/>
+    <text x="356" y="36" font-size="9.5" fill="#8B95A1">전문 노드 — supervisor가 순서 결정</text>
+    <rect x="352" y="46" width="208" height="40" rx="6" fill="${B}" stroke="${BS}"/><text x="456" y="63" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="${BS}">retriever</text><text x="456" y="78" text-anchor="middle" font-size="9" fill="#4E5968">하이브리드 검색 (벡터+그래프)</text>
+    <rect x="352" y="94" width="208" height="40" rx="6" fill="${B}" stroke="${BS}"/><text x="456" y="111" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="${BS}">data_analyst</text><text x="456" y="126" text-anchor="middle" font-size="9" fill="#4E5968">MES/FDC/계측 SQL 조회</text>
+    <rect x="352" y="142" width="208" height="40" rx="6" fill="${B}" stroke="${BS}"/><text x="456" y="159" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="${BS}">root_cause</text><text x="456" y="174" text-anchor="middle" font-size="9" fill="#4E5968">원인 가설 · 확신도</text>
+    <rect x="352" y="190" width="208" height="40" rx="6" fill="${G}" stroke="${GS}"/><text x="456" y="207" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#0B7A4E">cost_impact</text><text x="456" y="222" text-anchor="middle" font-size="9" fill="#4E5968">결정론 원가 산식 + LLM 개선안</text>
+    <line x1="187" y1="114" x2="187" y2="266" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <text x="196" y="196" font-size="9.5" fill="#8B95A1">근거 완성 시</text>
+    <rect x="118" y="268" width="138" height="70" rx="8" fill="${B}" stroke="${BS}" stroke-width="1.1"/>
+    <text x="187" y="298" text-anchor="middle" font-family="JetBrains Mono" font-size="12" font-weight="600" fill="${BS}">report_writer</text>
+    <text x="187" y="316" text-anchor="middle" font-size="10" fill="#4E5968">경영 보고서 초안</text>
+    <line x1="256" y1="303" x2="304" y2="303" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <polygon points="306,303 386,258 466,303 386,348" fill="${A}" stroke="${AS}" stroke-width="1.1"/>
+    <text x="386" y="300" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#B54708">validator</text>
+    <text x="386" y="315" text-anchor="middle" font-size="9" fill="#4E5968">3렌즈 검증</text>
+    <path d="M386 258 V236 H212 V264" fill="none" stroke="${AS}" stroke-width="1.3" stroke-dasharray="5 3" marker-end="url(#pfw)"/>
+    <text x="299" y="230" text-anchor="middle" font-size="9.5" fill="#B54708">반려 — 재작성 (상한 2회)</text>
+    <line x1="466" y1="303" x2="514" y2="303" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <text x="490" y="294" text-anchor="middle" font-size="9" fill="#8B95A1">통과/상한</text>
+    <rect x="518" y="268" width="150" height="70" rx="8" fill="${G}" stroke="${GS}" stroke-width="1.1"/>
+    <text x="593" y="298" text-anchor="middle" font-family="JetBrains Mono" font-size="12" font-weight="600" fill="#0B7A4E">action_planner</text>
+    <text x="593" y="316" text-anchor="middle" font-size="10" fill="#4E5968">조치 초안 (감사 가능)</text>
+    <line x1="668" y1="303" x2="704" y2="303" stroke="#8B95A1" stroke-width="1.3" marker-end="url(#pfa)"/>
+    <rect x="708" y="286" width="58" height="34" rx="17" fill="#F2F4F6" stroke="#D8DEE5"/><text x="737" y="307" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#4E5968">END</text>
+    <rect x="118" y="374" width="11" height="11" rx="2" fill="${B}" stroke="${BS}"/><text x="136" y="384" font-size="10" fill="#4E5968">LLM 노드</text>
+    <rect x="208" y="374" width="11" height="11" rx="2" fill="${G}" stroke="${GS}"/><text x="226" y="384" font-size="10" fill="#4E5968">결정론 노드</text>
+    <rect x="308" y="374" width="11" height="11" rx="2" fill="${A}" stroke="${AS}"/><text x="326" y="384" font-size="10" fill="#4E5968">품질 게이트 (순환)</text>
+  </svg>`;
+
+  const nodes=[
+    ["supervisor","LLM+규칙","0.2","질의 해석·처리 계획 수립 후, 상태의 빈 칸 순서로 결정론 라우팅","query","plan, next","계획 파싱 실패 시 기본 계획으로 진행"],
+    ["retriever","임베딩+그래프","—","Chroma 벡터 유사도 + 지식 맵 DFS 인과경로 하이브리드 검색","query","retrieved_docs, kg_paths","경로 미발견 시 벡터 결과만으로 진행"],
+    ["data_analyst","LLM+SQL 가드","0.2","스키마 제시 후 SELECT 생성(최대 3건), 읽기전용 실행·50행 제한","query","sql_results","쿼리 파싱 실패 → 빈 결과 명시, 쓰기 구문 차단"],
+    ["root_cause","LLM","0.2","문서·인과경로·데이터를 종합해 원인 가설과 확신도 제시","retrieved_docs, kg_paths, sql_results","root_cause","—"],
+    ["cost_impact","결정론+LLM","0.2","손실액·월환산은 Python 산식(cost_model), LLM은 개선안 도출만 — 수치 변경 금지","root_cause, DB","cost_impact","개선안 파싱 실패 → 수동 검토 플래그"],
+    ["report_writer","LLM","0.3","배경·원인·재무·권고·다음단계 구조의 보고서. 반려 지적 반영 재작성","전체 상태 + critiques","report","출력 폭주 반복 새니타이저 적용"],
+    ["validator","LLM 판정","0.0","근거정합성·수치정확성·논리구조 3렌즈 채점, 반려/통과 결정","report, 근거 일체","critiques, validation, next","판정 파싱 2회 실패 → 검증 불능 명시 (자동 통과 금지)"],
+    ["action_planner","결정론","—","개선안→MES 작업오더 초안, 지식 맵 관리 파라미터→FDC 알람변경 초안","cost_impact","actions","개선안 없으면 알람변경 초안만 생성"]];
+
+  const stateFields=[
+    ["query","str","(입력)","엔지니어 자연어 질의"],
+    ["plan","list","supervisor","처리 계획 (설명 가능성 확보용)"],
+    ["retrieved_docs","list","retriever","벡터 검색 결과 (출처·유사도 포함)"],
+    ["kg_paths","list","retriever","지식 맵 인과 경로"],
+    ["sql_results","dict","data_analyst","실행 쿼리 → 결과셋 매핑"],
+    ["root_cause","str","root_cause","원인 가설 + 확신도"],
+    ["cost_impact","dict","cost_impact","산식·손실액·ROI·가정·일별 시계열"],
+    ["report","str","report_writer","경영 보고서 초안 (마크다운)"],
+    ["critiques","list","validator","반려 지적사항"],
+    ["validation","dict","validator","렌즈별 통과 여부"],
+    ["revision_count","int","validator","재작성 횟수 (무한루프 방지)"],
+    ["actions","list","action_planner","조치 초안 (작업오더·알람변경)"]];
+
+  const routing=[
+    ["retrieved_docs 없음","retriever"],["sql_results 없음","data_analyst"],
+    ["root_cause 없음","root_cause"],["cost_impact 없음","cost_impact"],
+    ["report 없음 (또는 반려 재진입)","report_writer"]];
+  const vroute=[
+    ["3렌즈 모두 통과","action_planner (조치 생성 후 종료)"],
+    ["미흡 · 재작성 2회 미만","report_writer (지적사항 첨부 반려)"],
+    ["미흡 · 재작성 상한 도달","action_planner (한계 명시 후 종료)"],
+    ["판정 파싱 2회 실패","action_planner (검증 불능 명시 — 자동 통과 금지)"]];
+
+  const guards=[
+    ["SQL 읽기전용 가드","SELECT/WITH만 허용, 다중 구문 차단, 결과 50행 제한","data_analyst"],
+    ["출력 새니타이저","표 구분선 등 문자 폭주 반복 압축 (출력 토큰 소진 방지)","report_writer"],
+    ["재작성 상한","순환 2회 제한 — 초과 시 한계 명시 후 진행 (무한루프 차단)","validator"],
+    ["fail-visible 원칙","검증기 고장 시 자동 통과가 아니라 '검증 불능' 명시","validator"],
+    ["수치 불변 원칙","LLM은 산식 결과를 인용만 — 재계산·반올림 금지, 검증 렌즈가 대조","cost_impact"],
+    ["모델 폴백 체인","주 모델 장애 시 예비 모델로 자동 전환 (실행 무중단)","전 LLM 노드"],
+    ["재귀 한도","그래프 스텝 상한 40 (라우팅 이상 시 안전 종료)","그래프 전역"]];
+
   $("vb-process").innerHTML=`
-    <div class="vcard"><div class="t">실행 흐름</div>
-      <div class="d">LangGraph 상태 그래프 — supervisor가 전문 노드를 오가며 공유 상태를 채우고, 검증이 반려하면 보고서 재작성으로 되돌아가는 순환 구조입니다.</div>
-      <div class="kgp">${kgChips("질의 --라우팅--> 지식·데이터 수집 --종합--> 원인 규명 --정량화--> 원가·ROI --작성--> 보고서 --검증--> 조치 초안")}</div>
-      <div class="d" style="margin-top:8px;margin-bottom:0">검증 미흡 시: 보고서 → 반려 → 재작성 → 재검증 (상한 2회, 도달 시 한계 명시 후 종료)</div></div>
-    <div class="vcard"><div class="t">노드 정의 (8)</div>
-      <table class="data" style="white-space:normal"><tr><th>#</th><th>노드</th><th>방식</th><th>역할</th><th>입력 → 출력</th></tr>
-      ${steps.map((s,i)=>`<tr><td>${i+1}</td><td>${s[0]}</td><td style="font-family:var(--sans)"><span class="type-badge">${s[2]}</span></td><td style="font-family:var(--sans)">${s[3]}</td><td style="font-family:var(--sans);color:var(--t3)">${s[4]}</td></tr>`).join("")}</table></div>
+    <div class="vcard"><div class="t">실행 흐름도</div>
+      <div class="d">LangGraph 상태 그래프(StateGraph). supervisor가 전문 노드를 오가며 공유 상태를 채우고, validator가 반려하면 report_writer로 되돌아가는 순환 구조입니다.</div>
+      ${flow}</div>
+    <div class="vcard"><div class="t">노드 명세 (8)</div>
+      <table class="data" style="white-space:normal"><tr><th>#</th><th>노드</th><th>방식</th><th>temp</th><th>역할</th><th>읽는 상태</th><th>쓰는 상태</th><th>실패 처리</th></tr>
+      ${nodes.map((s,i)=>`<tr><td>${i+1}</td><td>${s[0]}</td><td style="font-family:var(--sans)"><span class="type-badge">${s[1]}</span></td><td>${s[2]}</td><td style="font-family:var(--sans)">${s[3]}</td><td style="font-size:10.5px">${s[4]}</td><td style="font-size:10.5px">${s[5]}</td><td style="font-family:var(--sans);color:var(--t3)">${s[6]}</td></tr>`).join("")}</table></div>
+    <div class="vcard"><div class="t">공유 상태 정의 (OpsState)</div>
+      <div class="d">모든 노드가 읽고 쓰는 단일 상태 객체 — 파이프라인의 데이터 계약입니다. API 응답도 이 상태를 매핑해 반환합니다.</div>
+      <table class="data" style="white-space:normal"><tr><th>필드</th><th>타입</th><th>기록 노드</th><th>설명</th></tr>
+      ${stateFields.map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td><td>${f[2]}</td><td style="font-family:var(--sans)">${f[3]}</td></tr>`).join("")}</table></div>
+    <div class="vcard"><div class="t">라우팅 결정표</div>
+      <div class="d">supervisor는 상태의 빈 칸을 위에서부터 검사해 다음 노드를 결정합니다 (결정론 — 데모 재현성 확보). validator의 분기는 별도 규칙을 따릅니다.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <table class="data" style="white-space:normal"><tr><th colspan="2">supervisor 라우팅</th></tr><tr><th>조건 (순차 검사)</th><th>다음 노드</th></tr>
+      ${routing.map(r=>`<tr><td style="font-family:var(--sans)">${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>
+      <table class="data" style="white-space:normal"><tr><th colspan="2">validator 분기</th></tr><tr><th>판정</th><th>다음</th></tr>
+      ${vroute.map(r=>`<tr><td style="font-family:var(--sans)">${r[0]}</td><td style="font-family:var(--sans)">${r[1]}</td></tr>`).join("")}</table></div></div>
+    <div class="vcard"><div class="t">예외 처리·안전장치</div>
+      <table class="data" style="white-space:normal"><tr><th>장치</th><th>내용</th><th>적용 위치</th></tr>
+      ${guards.map(g=>`<tr><td style="font-family:var(--sans);font-weight:600">${g[0]}</td><td style="font-family:var(--sans)">${g[1]}</td><td style="font-family:var(--sans);color:var(--t3)">${g[2]}</td></tr>`).join("")}</table></div>
+    <div class="vcard"><div class="t">실행 프로파일</div>
+      <div class="statgrid">
+        <div class="stat"><div class="l">LLM 호출 / 완주</div><div class="v">8~14회</div></div>
+        <div class="stat"><div class="l">평균 소요 (라이브)</div><div class="v">2~3분</div></div>
+        <div class="stat"><div class="l">SQL 조회 상한</div><div class="v">3건 × 50행</div></div>
+        <div class="stat"><div class="l">조치 초안</div><div class="v">최대 4건</div></div></div>
+      <div class="d" style="margin:10px 0 0">재작성 반려 1회당 LLM 호출 +2회. 결정론 노드(cost_impact 산식·action_planner)는 LLM 호출 없이 ms 단위로 완료됩니다.</div></div>
     <div class="vcard"><div class="t">설계 원칙 — 역할 분리</div>
       <div class="d">돈과 조치는 코드가 계산하고, LLM은 설명합니다.</div>
       <table class="data" style="white-space:normal"><tr><th>담당</th><th>대상</th><th>이유</th></tr>
@@ -764,8 +878,10 @@ document.querySelectorAll(".tab").forEach(el=>el.addEventListener("click",()=>{
 }));
 document.querySelector('[data-t="0"]').classList.add("on");
 $("q").addEventListener("keydown",e=>{if(e.key==="Enter")runAnalysis()});
+$("sess").textContent = "ses-" + Math.random().toString(16).slice(2,8);
 nodeStates=Object.fromEntries(NODES.map(n=>[n,"done"]));drawNodes(nodeStates);
 addLog("system","이전 세션 결과 로드됨 (예시)","");
+drawHist();
 renderResult(MOCK);
 </script>
 </body>
