@@ -195,6 +195,20 @@ _SOURCES = [
 ]
 
 
+@app.get("/api/meta/health")
+def meta_health():
+    """배포 진단 — 키·인덱스 구성 여부만 반환 (값은 노출하지 않음)."""
+    import os
+
+    from src.llm import CHAT_MODEL as _cm
+    return {
+        "google_api_key_set": bool(os.getenv("GOOGLE_API_KEY")),
+        "chroma_index_built": (ROOT / "data" / "chroma_db").exists(),
+        "chat_model": _cm,
+        "db_seeded": (ROOT / "data" / "fab.sqlite").exists(),
+    }
+
+
 @app.get("/api/meta/status")
 def meta_status():
     out = []
