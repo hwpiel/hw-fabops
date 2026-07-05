@@ -33,4 +33,4 @@ def root_cause(state: OpsState) -> dict:
     kg = "\n".join(state.get("kg_paths", [])) or "(경로 없음)"
     sql = json.dumps(state.get("sql_results", {}), ensure_ascii=False, default=str)[:3000]
     resp = get_chat().invoke(_PROMPT.format(query=state["query"], kg=kg, docs=docs, sql=sql))
-    return {"root_cause": text_of(resp).strip()}
+    return {"root_cause": text_of(resp).strip().replace("**", "")}

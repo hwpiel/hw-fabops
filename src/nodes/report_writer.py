@@ -15,6 +15,7 @@ from ..util import text_of
 def _sanitize(md: str) -> str:
     """LLM 폭주 반복 방어 — 표 구분선 등에서 '-'·':'·'=' 가 수십만 자 반복되며
     출력 토큰을 소진해 보고서가 잘리는 사례가 실측됨. 긴 반복열을 압축한다."""
+    md = md.replace("**", "")  # 강조 마크업 금지 원칙 — LLM 이 섞어 내보내는 볼드 제거
     md = re.sub(r"-{4,}", "---", md)
     md = re.sub(r"={4,}", "===", md)
     md = re.sub(r":-{3,}", ":---", md)
