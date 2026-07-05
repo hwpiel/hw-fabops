@@ -12,9 +12,12 @@ from statistics import mean, pstdev
 from .tools import run_sql
 
 
-def compute_loss() -> dict:
-    """lot_yield 전 기간을 전반/후반으로 나눠 수율 하락이 가장 큰 설비를 찾고,
-    스크랩 원가 기준 손실액을 결정론적으로 계산한다."""
+def compute_loss(target_equip: str | None = None) -> dict:
+    """lot_yield 전 기간을 전반/후반으로 나눠 수율 하락 설비의 손실액을 결정론 계산한다.
+
+    target_equip 이 주어지고 해당 설비에 유효한 하락이 있으면 그 설비를 분석한다
+    (질의가 특정 설비를 지목한 경우 — 전역 최악 설비로 대답하는 불일치 방지).
+    없거나 하락이 없으면 전역 최악 설비로 폴백한다."""
     rows = run_sql(
         "SELECT equip_id, process_step, date, yield_pct, wafer_count FROM lot_yield ORDER BY date"
     )
@@ -45,6 +48,12 @@ def compute_loss() -> dict:
         e["delta_pp"] = round(e["baseline_yield"] - e["recent_yield"], 2)
         if worst is None or e["delta_pp"] > worst["delta_pp"]:
             worst_id, worst = eid, e
+
+    # 질의가 지목한 설비에 유효한 하락이 있으면 그 설비를 우선한다
+    if target_equip and target_equip in by_equip:
+        t = by_equip[target_equip]
+        if t.get("delta_pp", 0) > 0:
+            worst_id, worst = target_equip, t
 
     if worst is None or worst["delta_pp"] <= 0:
         return {

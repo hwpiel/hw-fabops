@@ -292,6 +292,9 @@ ol.gsteps li::before{counter-increment:g;content:counter(g);position:absolute;le
       <option value="">선택...</option>
       <option>M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘</option>
       <option>DEP-03 결함 이슈 원인과 원가 영향 분석해줘</option></select></div>
+    <div class="f-field"><label>실행 모드</label><select id="mode" style="width:150px" onchange="try{localStorage.setItem('fabops-mode',this.value)}catch(e){}">
+      <option value="demo">빠른 데모</option>
+      <option value="live">라이브 (2~3분)</option></select></div>
     <button class="btn-pri" id="run" onclick="runAnalysis()">분석 실행</button>
   </div>
 </div>
@@ -352,10 +355,11 @@ ol.gsteps li::before{counter-increment:g;content:counter(g);position:absolute;le
 </div>
 
 <script>
-/* ── 연동 이음새: http 로 서빙되면 기본 API 모드(POST /api/analyze), 실패 시 목데이터로
-   자동 폴백. ?mock 쿼리스트링으로 강제 목데이터 모드. evidence.* 는 서버(api.py)가
-   그래프 상태(sql_results, retrieved_docs)와 cost_model 산출을 매핑해 채운다. */
-const USE_API = location.protocol.startsWith("http") && !new URLSearchParams(location.search).has("mock");
+/* ── 연동 이음새: 기본은 빠른 데모(목데이터, 즉시 반응). 실행 모드를 '라이브'로 바꾸면
+   POST /api/analyze 로 실제 파이프라인을 완주한다(2~3분, 실패 시 목 폴백).
+   ?mock 쿼리스트링은 강제 목 모드. evidence.* 는 서버(api.py)가 그래프 상태를 매핑해 채운다. */
+const FORCE_MOCK = new URLSearchParams(location.search).has("mock");
+function isLive(){ return !FORCE_MOCK && location.protocol.startsWith("http") && $("mode").value === "live"; }
 
 const MOCK = {
   query:"M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘",
@@ -473,19 +477,20 @@ async function runAnalysis(){
   drawKpis(null); TABS.forEach((_,i)=>{document.querySelector(`[data-t="${i}"]`).innerHTML=
     `<div class="placeholder">에이전트 파이프라인 실행 중 — 좌측 실행 로그에서 진행 상황을 확인하세요</div>`});
   const t0=performance.now();
+  const live = isLive();
   const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 300000);
-  const apiP = USE_API ? fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},
+  const apiP = live ? fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({query:$("q").value}),signal:ctrl.signal}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}) : null;
   for(const [node,msg,level,st] of SEQ){
     await new Promise(r=>setTimeout(r,600));
     Object.assign(nodeStates,st); drawNodes(nodeStates); addLog(node,msg,level);
   }
   let data;
-  if(USE_API){
-    addLog("system","백엔드 파이프라인 응답 대기 중...","");
+  if(live){
+    addLog("system","백엔드 파이프라인 응답 대기 중... (라이브 모드, 2~3분)","");
     try{ data = await apiP; $("dsrc").textContent="데이터소스: MES/FDC (시뮬레이션) · 라이브 파이프라인"; }
     catch(e){ data = MOCK; addLog("system","API 미응답 — 목데이터로 폴백","warn"); $("dsrc").textContent="데이터소스: 목데이터 (API 미연결)"; }
-  } else { data = MOCK; }
+  } else { data = MOCK; $("dsrc").textContent="데이터소스: 빠른 데모 (목데이터)"; }
   $("elapsed").textContent = ((performance.now()-t0)/1000).toFixed(1)+"초";
   renderResult(data);
   if(data && data.cost_impact && data.cost_impact.loss_krw) pushHist(q, data.cost_impact.loss_krw);
@@ -1059,7 +1064,7 @@ function renderGuideView(){
 
   <div class="vcard"><div class="t">팁</div>
     <ol class="gsteps">
-      <li>주소 뒤에 <span class="gk">?mock</span>을 붙이면 백엔드 호출 없이 목데이터로 즉시 시연됩니다 (화면 구성 확인용)</li>
+      <li>기본 실행 모드는 <b>빠른 데모</b>(목데이터, 즉시 반응)입니다. 실제 파이프라인을 돌리려면 실행 모드를 <span class="gk">라이브</span>로 바꾸세요 (2~3분 소요)</li>
       <li>화면이 이상하면 <span class="gk">Ctrl+Shift+R</span> (강력 새로고침) — 브라우저 캐시가 옛 버전을 보여줄 수 있습니다</li>
       <li>보고서 인쇄 버튼은 결과 탭 내용을 인쇄용 레이아웃으로 출력합니다</li>
       <li>좌측 최상단 햄버거 버튼으로 메뉴를 접으면 넓은 화면으로 볼 수 있습니다</li>
@@ -1076,6 +1081,7 @@ document.querySelectorAll(".tab").forEach(el=>el.addEventListener("click",()=>{
 document.querySelector('[data-t="0"]').classList.add("on");
 $("q").addEventListener("keydown",e=>{if(e.key==="Enter")runAnalysis()});
 $("sess").textContent = "ses-" + Math.random().toString(16).slice(2,8);
+try{ const m=localStorage.getItem("fabops-mode"); if(m) $("mode").value=m; }catch(e){}
 nodeStates=Object.fromEntries(NODES.map(n=>[n,"done"]));drawNodes(nodeStates);
 addLog("system","이전 세션 결과 로드됨 (예시)","");
 drawHist();

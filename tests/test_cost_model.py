@@ -33,6 +33,16 @@ class TestCostModel(unittest.TestCase):
         self.assertGreater(sig["baseline_sigma_pp"], 0)
         self.assertEqual(len(self.r["formula"]), 4)  # 유의성 판정이 산식 1행으로 노출
 
+    def test_target_equipment_respected(self):
+        r = compute_loss(target_equip="DEP-03")
+        self.assertEqual(r["affected_equip"], "DEP-03")
+        self.assertGreater(r["yield_loss_pp"], 1.0)
+        self.assertLess(r["yield_loss_pp"], 3.0)
+
+    def test_target_without_drop_falls_back_to_worst(self):
+        r = compute_loss(target_equip="RTP-02")  # 대조군 — 하락 없음
+        self.assertEqual(r["affected_equip"], "RTP-01")
+
     def test_evidence_series_included(self):
         self.assertEqual(self.r["contrast_equip"], "RTP-02")
         self.assertIn("RTP-01", self.r["daily_yield"])

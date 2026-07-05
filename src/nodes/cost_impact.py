@@ -9,6 +9,7 @@ SAP 원가 컨설팅 자산을 에이전트로 이식한 노드.
 from __future__ import annotations
 
 import json
+import re
 
 from ..cost_model import compute_loss
 from ..llm import get_chat
@@ -34,7 +35,10 @@ roi_note 에 그 가정을 명시하라.
 
 
 def cost_impact(state: OpsState) -> dict:
-    computed = compute_loss()
+    # 질의가 특정 설비(예: DEP-03)를 지목하면 그 설비 기준으로 계산 —
+    # 원인 분석은 지목 설비를 말하는데 원가는 전역 최악 설비로 답하는 불일치 방지
+    m = re.search(r"[A-Z]{2,4}-\d{2}", state.get("query", "").upper())
+    computed = compute_loss(target_equip=m.group(0) if m else None)
     if "loss_krw" not in computed:
         return {"cost_impact": computed}
 
