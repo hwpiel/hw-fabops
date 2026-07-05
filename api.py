@@ -126,9 +126,16 @@ def _evidence(state: dict) -> dict:
 def analyze(body: AnalyzeIn):
     t0 = time.time()
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
-    state = GRAPH.invoke(
-        {"query": body.query, "revision_count": 0}, {"recursion_limit": 40}
-    )
+    try:
+        state = GRAPH.invoke(
+            {"query": body.query, "revision_count": 0}, {"recursion_limit": 40}
+        )
+    except Exception as e:
+        # 라이브 파이프라인 불가(키 미설정·쿼터 소진 등) — 원인을 남기고 503 반환.
+        # UI 는 실패 시 목데이터 데모로 자동 폴백하므로 심사자 경험은 유지된다.
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(503, f"라이브 파이프라인 사용 불가: {type(e).__name__}")
     duration = round(time.time() - t0, 1)
 
     c = state.get("cost_impact") or {}
