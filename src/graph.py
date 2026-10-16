@@ -66,7 +66,7 @@ if __name__ == "__main__":
     import sys
 
     app = build_graph()
-    q = sys.argv[1] if len(sys.argv) > 1 else "M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
+    q = sys.argv[1] if len(sys.argv) > 1 else "FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
     final = app.invoke({"query": q, "revision_count": 0}, {"recursion_limit": 40})
     print("\n===== 계획 =====\n", "\n".join(final.get("plan", [])))
     print("\n===== 원인 =====\n", final.get("root_cause", ""))

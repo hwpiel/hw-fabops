@@ -280,17 +280,17 @@ ol.gsteps li::before{counter-increment:g;content:counter(g);position:absolute;le
 <div class="objhead">
   <div class="crumb">품질 관리 <i>›</i> 수율 분석 <i>›</i> <b>AI 이슈 분석</b></div>
   <div class="title-row">
-    <h1>AI 이슈 분석</h1><span class="tag">M15 FAB</span>
+    <h1>AI 이슈 분석</h1><span class="tag">FAB-A</span>
     <button class="btn-out" onclick="window.print()">보고서 인쇄</button>
   </div>
   <div class="filters">
     <div class="f-field f-q"><label>분석 질의</label>
-      <input id="q" value="M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘" spellcheck="false"></div>
+      <input id="q" value="FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘" spellcheck="false"></div>
     <div class="f-field"><label>기간</label><select style="width:120px"><option>최근 2주</option><option>최근 1개월</option></select></div>
     <div class="f-field"><label>대상 설비군</label><select style="width:130px"><option>RTP 전체</option><option>Implant</option><option>Deposition</option></select></div>
     <div class="f-field"><label>예시 질의</label><select id="ex" style="width:150px" onchange="if(this.value)document.getElementById('q').value=this.value">
       <option value="">선택...</option>
-      <option>M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘</option>
+      <option>FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘</option>
       <option>DEP-03 결함 이슈 원인과 원가 영향 분석해줘</option></select></div>
     <div class="f-field"><label>실행 모드</label><select id="mode" style="width:150px" onchange="try{localStorage.setItem('fabops-mode',this.value)}catch(e){}">
       <option value="demo">빠른 데모</option>
@@ -362,7 +362,7 @@ const FORCE_MOCK = new URLSearchParams(location.search).has("mock");
 function isLive(){ return !FORCE_MOCK && location.protocol.startsWith("http") && $("mode").value === "live"; }
 
 const MOCK = {
-  query:"M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘",
+  query:"FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘",
   run_id:"20260703-demo", model:"gemini-2.5-flash", duration_s:148.1,
   confidence:"높음",
   root_cause:"RTP-01의 peak_temp가 목표 1050℃ 대비 약 12℃ 상승하며 도펀트 과확산이 발생, sheet resistance가 스펙 상한(215Ω)을 이탈해 수율이 하락한 것으로 판단됩니다. FDC 로그의 승온 트렌드와 과거 동형 이슈(2025-Q3)가 일치하며, 대조 설비 RTP-02는 정상 범위입니다. 파이로미터 드리프트가 유력 원인입니다.",
@@ -417,7 +417,7 @@ const MOCK = {
     {type:"work_order",title:"파이로미터 재캘리브레이션 및 주기 단축",target_equip:"RTP-01",priority:"P1",est_cost_krw:8000000,rationale:"월 손실의 90% 회복 가정 (과거 동형 이슈에서 정상화 검증)",status:"draft"},
     {type:"work_order",title:"FDC peak_temp 알람 상한 강화 (1055→1053℃)",target_equip:"RTP-01",priority:"P2",est_cost_krw:2000000,rationale:"감지 지연 80% 단축",status:"draft"},
     {type:"alarm_change_request",target_equip:"RTP-01",param:"peak_temp_C",current_limit:1055,proposed_limit:1053,unit:"℃",rationale:"이상 재발 조기 감지를 위한 관리 상한 강화 (SOP·과거 이슈 조치 기준)",status:"draft"}],
-  report:["## 배경","M15 라인 RTP-01 설비에서 최근 2주간 로트 수율이 기준 대비 지속 하락하였다. 본 보고서는 원인 분석 결과와 재무 영향, 개선 우선순위를 보고한다.",
+  report:["## 배경","FAB-A 라인 RTP-01 설비에서 최근 2주간 로트 수율이 기준 대비 지속 하락하였다. 본 보고서는 원인 분석 결과와 재무 영향, 개선 우선순위를 보고한다.",
     "## 원인 분석","FDC 로그 분석 결과 RTP-01의 peak_temp가 목표 1050℃ 대비 약 12℃ 상승하였다. 이로 인한 도펀트 과확산으로 sheet resistance가 스펙 상한(215Ω)을 이탈하였으며, 2025-Q3 동형 이슈와 동일한 메커니즘이다. 대조 설비 RTP-02는 정상 범위로, 설비 개별 요인(파이로미터 드리프트)이 유력하다.",
     "## 재무 영향","| 구분 | 값 |","|---|---|","| 수율 하락 | 5.92%p (96.5% → 90.5%) |","| 손실 웨이퍼 | 12장 / 최근 투입 200장 |","| 손실액(스크랩 기준) | 31,200,000원 |","| 월 환산 손실 | 117,000,000원 |",
     "전량 스크랩 가정의 보수적 추정이며, 재작업 회복과 기회손실은 미포함이다.",

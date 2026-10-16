@@ -69,8 +69,8 @@ pip install -r requirements.txt
 cp .env.example .env        # GOOGLE_API_KEY 입력
 python data/seed_db.py      # MES/FDC 시뮬레이션 DB 생성
 python data/build_index.py  # RAG 인덱스 구축
-python -m unittest discover -s tests   # LLM 무의존 단위테스트 18개
-python -m src.graph "M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
+python -m unittest discover -s tests   # LLM 무의존 단위테스트 25개
+python -m src.graph "FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
 uvicorn api:app --port 8796 # 콘솔 UI + API (http://localhost:8796, ?mock 로 목데이터 모드)
 ```
 

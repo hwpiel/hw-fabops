@@ -5,7 +5,7 @@ from src.kg import extract_paths, find_seed_entities
 
 
 class TestKnowledgeGraph(unittest.TestCase):
-    QUERY = "M15 RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
+    QUERY = "FAB-A RTP 설비 최근 2주 수율 하락 원인과 재무 영향, 개선 우선순위 알려줘"
 
     def test_seeds_found(self):
         seeds = find_seed_entities(self.QUERY)
